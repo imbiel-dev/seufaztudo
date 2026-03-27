@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>seufaztudo</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-badge">A</div>
+      <div>
+        <h1>seufaztudo</h1>
+        <p>Encontre prestadores perto de você</p>
+      </div>
+    </div>
+
+    <nav class="topnav">
+      <button class="nav-btn" data-route="home">Início</button>
+      <button class="nav-btn" data-route="urgent">Chamado urgente</button>
+      <button class="nav-btn" data-route="login">Login</button>
+      <button class="nav-btn" data-route="register">Cadastrar prestador</button>
+      <button class="nav-btn hidden" id="btnDashboard" data-route="dashboard">Dashboard</button>
+      <button class="nav-btn hidden" id="btnLogout">Sair</button>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section id="alertBox" class="alert hidden"></section>
+
+    <!-- HOME -->
+    <section class="screen active" id="screen-home">
+      <div class="hero">
+        <div>
+          <span class="tag">Marketplace local</span>
+          <h2>O profissional certo, perto de você</h2>
+          <p>
+            Encontre encanadores, eletricistas, pedreiros, chaveiros e outros
+            prestadores próximos com rapidez.
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Buscar prestadores</h3>
+
+        <div class="grid-3">
+          <div class="field">
+            <label for="searchService">Serviço</label>
+            <input id="searchService" type="text" placeholder="Ex: eletricista" />
+          </div>
+
+          <div class="field">
+            <label for="searchRadius">Raio</label>
+            <select id="searchRadius">
+              <option value="5">Até 5 km</option>
+              <option value="10" selected>Até 10 km</option>
+              <option value="20">Até 20 km</option>
+              <option value="30">Até 30 km</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>&nbsp;</label>
+            <button id="btnUseLocation" class="btn btn-secondary" type="button">
+              Usar minha localização
+            </button>
+          </div>
+        </div>
+
+        <div class="location-box">
+          <strong>Sua localização:</strong>
+          <span id="userLocationText">não definida</span>
+        </div>
+
+        <div class="actions">
+          <button id="btnSearch" class="btn" type="button">Buscar</button>
+        </div>
+      </div>
+
+      <div class="results-header">
+        <h3>Prestadores encontrados</h3>
+        <span id="resultsCount">0 resultados</span>
+      </div>
+
+      <div id="providersList" class="providers-list"></div>
+    </section>
+
+    <!-- LOGIN -->
+    <section class="screen" id="screen-login">
+      <div class="card auth-card">
+        <h3>Entrar</h3>
+        <p class="muted">Acesse sua conta de prestador.</p>
+
+        <form id="formLogin">
+          <div class="field">
+            <label for="loginEmail">Email</label>
+            <input id="loginEmail" type="email" placeholder="seuemail@exemplo.com" required />
+          </div>
+
+          <div class="field">
+            <label for="loginPassword">Senha</label>
+            <input id="loginPassword" type="password" placeholder="Sua senha" required />
+          </div>
+
+          <button type="submit" class="btn w-full">Entrar</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- CADASTRO -->
+    <section class="screen" id="screen-register">
+      <div class="card">
+        <h3>Cadastro de prestador</h3>
+        <p class="muted">
+          Os primeiros 500 prestadores recebem 3 meses grátis no lançamento.
+        </p>
+
+        <form id="formRegister">
+          <div class="grid-2">
+            <div class="field">
+              <label for="registerName">Nome</label>
+              <input id="registerName" type="text" placeholder="Seu nome ou nome profissional" required />
+            </div>
+
+            <div class="field">
+              <label for="registerEmail">Email</label>
+              <input id="registerEmail" type="email" placeholder="seuemail@exemplo.com" required />
+            </div>
+
+            <div class="field">
+              <label for="registerPassword">Senha</label>
+              <input id="registerPassword" type="password" placeholder="Crie uma senha" required />
+            </div>
+
+            <div class="field">
+              <label for="registerWhatsapp">WhatsApp</label>
+              <input id="registerWhatsapp" type="text" placeholder="11999999999" required />
+            </div>
+
+            <div class="field">
+              <label for="registerService">Serviço principal</label>
+              <input id="registerService" type="text" placeholder="Ex: eletricista" required />
+            </div>
+
+            <div class="field">
+              <label for="registerExperience">Anos de experiência</label>
+              <input id="registerExperience" type="number" min="0" placeholder="Ex: 5" required />
+            </div>
+
+            <div class="field">
+              <label for="registerPrice">Preço médio</label>
+              <input id="registerPrice" type="number" min="0" step="0.01" placeholder="Ex: 150" required />
+            </div>
+
+            <div class="field">
+              <label for="registerRadius">Raio de atendimento</label>
+              <select id="registerRadius">
+                <option value="5">5 km</option>
+                <option value="10" selected>10 km</option>
+                <option value="20">20 km</option>
+                <option value="30">30 km</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="registerDescription">Descrição</label>
+            <textarea id="registerDescription" rows="4" placeholder="Fale rapidamente sobre o seu serviço"></textarea>
+          </div>
+
+          <div class="grid-2">
+            <label class="check">
+              <input id="registerEmergency" type="checkbox" />
+              <span>Atendo emergência</span>
+            </label>
+
+            <div class="actions-end">
+              <button type="button" id="btnRegisterLocation" class="btn btn-secondary">
+                Usar minha localização atual
+              </button>
+            </div>
+          </div>
+
+          <div class="location-box">
+            <strong>Localização do prestador:</strong>
+            <span id="providerLocationText">não definida</span>
+          </div>
+
+          <label class="check">
+            <input type="checkbox" required />
+            <span>
+              Li e aceito os 
+              <a href="#" data-route="terms">Termos de Uso</a> e 
+              <a href="#" data-route="privacy">Política de Privacidade</a>
+            </span>
+          </label>
+
+          <div class="legal-accept-box">
+            <label class="check check-legal">
+              <input id="registerAcceptLegal" type="checkbox" required />
+              <span>
+                Declaro que li e aceito os
+                <a href="#" data-route="terms">Termos de Uso</a>,
+                a <a href="#" data-route="privacy">Política de Privacidade</a>,
+                a <a href="#" data-route="payments">Política de Pagamentos</a>
+                e o <a href="#" data-route="legal">Aviso Legal</a>.
+              </span>
+            </label>
+
+            <p class="small-muted">
+              Ao criar a conta, você declara que as informações cadastradas são verdadeiras,
+              que possui autorização para divulgar seus dados profissionais na plataforma
+              e que compreende que o seufaztudo atua apenas como intermediador digital.
+            </p>
+          </div>
+
+          <button type="submit" class="btn w-full">Criar conta</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- DASHBOARD -->
+    <section class="screen" id="screen-dashboard">
+      <div class="dashboard-header">
+        <div>
+          <h2>Dashboard do prestador</h2>
+          <p class="muted">Gerencie seu perfil e acompanhe seus números</p>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="card">
+          <h3>Plano e destaque</h3>
+
+          <p id="planMessage" class="muted">Carregando status do plano...</p>
+
+          <div class="actions">
+            <button id="btnBuyBoost" class="btn" type="button">Comprar boost 7 dias • R$ 4,99</button>
+            <button id="btnBuySubscription" class="btn btn-secondary" type="button">Assinar 30 dias • R$ 9,99</button>
+            <button id="btnRefreshPlan" class="btn btn-secondary" type="button">Atualizar status</button>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <span>Visualizações</span>
+          <strong id="statViews">0</strong>
+        </div>
+
+        <div class="stat-card">
+          <span>Cliques no WhatsApp</span>
+          <strong id="statWhatsapp">0</strong>
+        </div>
+
+        <div class="stat-card">
+          <span>Avaliação média</span>
+          <strong id="statRating">0.0</strong>
+        </div>
+
+        <div class="stat-card">
+          <span>Status do plano</span>
+          <strong id="statPlan">Grátis no lançamento</strong>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Meu perfil</h3>
+
+        <form id="formProfile">
+          <div class="grid-2">
+            <div class="field">
+              <label for="profileName">Nome</label>
+              <input id="profileName" type="text" />
+            </div>
+
+            <div class="field">
+              <label for="profileWhatsapp">WhatsApp</label>
+              <input id="profileWhatsapp" type="text" />
+            </div>
+
+            <div class="field">
+              <label for="profileService">Serviço principal</label>
+              <input id="profileService" type="text" />
+            </div>
+
+            <div class="field">
+              <label for="profileExperience">Anos de experiência</label>
+              <input id="profileExperience" type="number" min="0" />
+            </div>
+
+            <div class="field">
+              <label for="profilePrice">Preço médio</label>
+              <input id="profilePrice" type="number" min="0" step="0.01" />
+            </div>
+
+            <div class="field">
+              <label for="profileRadius">Raio de atendimento</label>
+              <select id="profileRadius">
+                <option value="5">5 km</option>
+                <option value="10">10 km</option>
+                <option value="20">20 km</option>
+                <option value="30">30 km</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="profileDescription">Descrição</label>
+            <textarea id="profileDescription" rows="4"></textarea>
+          </div>
+
+          <div class="grid-2">
+            <label class="check">
+              <input id="profileEmergency" type="checkbox" />
+              <span>Atendo emergência</span>
+            </label>
+
+            <div class="actions-end">
+              <button type="button" id="btnProfileLocation" class="btn btn-secondary">
+                Atualizar localização
+              </button>
+            </div>
+          </div>
+
+          <div class="location-box">
+            <strong>Minha localização:</strong>
+            <span id="profileLocationText">não definida</span>
+          </div>
+
+          <button type="submit" class="btn w-full">Salvar perfil</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Chamados urgentes recebidos</h3>
+        <p class="muted">
+          Aqui aparecem os chamados próximos da sua região quando você atende emergência.
+        </p>
+
+        <div class="actions">
+          <button id="btnRefreshUrgentRequests" class="btn btn-secondary" type="button">
+            Atualizar chamados
+          </button>
+        </div>
+
+        <div id="providerUrgentCallsList" class="providers-list"></div>
+      </div>
+    </section>
+
+    <!-- CHAMADO URGENTE -->
+    <section class="screen" id="screen-urgent">
+      <div class="card">
+        <h3>Chamado urgente</h3>
+        <p class="muted">
+          Envie um chamado para prestadores próximos e aumente suas chances de resolver o problema rápido.
+        </p>
+
+        <form id="formUrgent">
+          <div class="grid-2">
+            <div class="field">
+              <label for="urgentService">Serviço necessário</label>
+              <input id="urgentService" type="text" placeholder="Ex: encanador" required />
+            </div>
+
+            <div class="field">
+              <label for="urgentContact">Seu contato</label>
+              <input id="urgentContact" type="text" placeholder="WhatsApp ou telefone" required />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="urgentDescription">Descreva o problema</label>
+            <textarea id="urgentDescription" rows="4" placeholder="Ex: vazamento na cozinha" required></textarea>
+          </div>
+
+          <div class="actions">
+            <button type="button" id="btnUrgentLocation" class="btn btn-secondary">Usar minha localização</button>
+            <button type="submit" class="btn">Enviar chamado</button>
+          </div>
+
+          <div class="location-box">
+            <strong>Local do chamado:</strong>
+            <span id="urgentLocationText">não definido</span>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Respostas do seu chamado</h3>
+        <p class="muted">
+          Depois de enviar, os prestadores próximos poderão responder aqui.
+        </p>
+
+        <div class="actions">
+          <button id="btnLoadMyUrgentResponses" class="btn btn-secondary" type="button">Atualizar respostas</button>
+        </div>
+
+        <div id="urgentResponsesList" class="providers-list"></div>
+      </div>
+    </section>
+
+    <!-- TERMOS DE USO -->
+<section class="screen" id="screen-terms">
+  <div class="card legal-page">
+    <h2>Termos de Uso</h2>
+    <p class="muted">Última atualização: 21/03/2026</p>
+
+    <h3>1. Apresentação da plataforma</h3>
+    <p>
+      O seufaztudo é uma plataforma digital de intermediação que aproxima usuários
+      interessados em contratar serviços e prestadores autônomos ou empresas que
+      desejam divulgar seus serviços.
+    </p>
+    <p>
+      O seufaztudo não executa, não supervisiona presencialmente, não dirige,
+      não controla tecnicamente e não garante a realização dos serviços anunciados
+      por terceiros.
+    </p>
+
+    <h3>2. Aceitação</h3>
+    <p>
+      Ao acessar, navegar, cadastrar-se ou utilizar o seufaztudo, o usuário declara
+      que leu, compreendeu e concorda com estes Termos de Uso e com os demais
+      documentos jurídicos da plataforma.
+    </p>
+
+    <h3>3. Natureza da relação</h3>
+    <p>
+      O seufaztudo atua como ambiente digital de conexão entre as partes e não
+      integra a relação contratual material firmada entre usuário contratante e
+      prestador.
+    </p>
+    <p>
+      A contratação do serviço, a negociação de preço, prazo, forma de execução,
+      garantia, qualidade, materiais, deslocamento, disponibilidade, emissão de nota,
+      eventuais vícios, cancelamentos e responsabilidades civis decorrentes da execução
+      são assumidas diretamente entre usuário e prestador.
+    </p>
+
+    <h3>4. Cadastro de prestadores</h3>
+    <p>Ao se cadastrar, o prestador declara e garante que:</p>
+    <ul>
+      <li>é civilmente capaz e possui legitimidade para atuar profissionalmente;</li>
+      <li>fornece dados verdadeiros, completos e atualizados;</li>
+      <li>possui capacidade técnica, autorizações e qualificações necessárias para o serviço que anuncia, quando exigíveis;</li>
+      <li>é responsável integral pelo conteúdo do próprio perfil, preços, descrição, atendimento e conduta profissional;</li>
+      <li>não utilizará a plataforma para fraude, golpe, spam, assédio, prática ilícita ou oferta enganosa.</li>
+    </ul>
+
+    <h3>5. Regras de uso</h3>
+    <p>É proibido usar o seufaztudo para:</p>
+    <ul>
+      <li>praticar fraude, engenharia social, golpes, falsidade ideológica ou tentativa de obtenção indevida de valores;</li>
+      <li>publicar conteúdo ofensivo, discriminatório, ilegal, difamatório ou que viole direitos de terceiros;</li>
+      <li>anunciar serviços ilícitos ou cuja atividade dependa de licença não possuída;</li>
+      <li>coletar dados de outros usuários para fins não autorizados;</li>
+      <li>tentar invadir, copiar, desmontar, explorar ou prejudicar o sistema.</li>
+    </ul>
+
+    <h3>6. Conta, acesso e segurança</h3>
+    <p>
+      O usuário é responsável pela confidencialidade de suas credenciais de acesso e
+      por toda atividade realizada em sua conta. O seufaztudo poderá adotar medidas de
+      verificação, bloqueio, limitação ou suspensão em caso de indícios de fraude,
+      risco à segurança, violação destes Termos ou obrigação legal.
+    </p>
+
+    <h3>7. Geolocalização e ranqueamento</h3>
+    <p>
+      A plataforma poderá utilizar localização aproximada ou precisa, quando autorizada,
+      para exibir prestadores próximos, ordenar resultados, calcular distância e
+      viabilizar funcionalidades como busca local e chamados urgentes.
+    </p>
+    <p>
+      A ordem de exibição pode considerar, entre outros fatores, proximidade, categoria,
+      aderência ao serviço buscado, informações do perfil, avaliação, histórico de uso,
+      destaque pago, disponibilidade e critérios internos da plataforma.
+    </p>
+    <p>
+      O seufaztudo não garante posição fixa, volume mínimo de contatos, número de
+      contratações, exclusividade territorial ou retorno financeiro ao prestador.
+    </p>
+
+    <h3>8. Chamados urgentes</h3>
+    <p>
+      A funcionalidade de chamado urgente destina-se apenas a ampliar a chance de contato
+      rápido com prestadores potencialmente compatíveis com a demanda.
+    </p>
+    <p>
+      O seufaztudo não garante tempo de resposta, aceite de atendimento, disponibilidade
+      do prestador, conclusão do serviço ou solução do problema relatado.
+    </p>
+
+    <h3>9. Pagamentos da plataforma</h3>
+    <p>
+      O seufaztudo poderá oferecer serviços pagos, como destaque, impulsionamento,
+      assinatura, prioridade de exibição ou outros benefícios digitais.
+    </p>
+    <p>
+      Esses serviços se referem ao uso de funcionalidades da plataforma e não representam
+      promessa de contratação, faturamento, retorno financeiro, quantidade mínima de leads
+      ou sucesso comercial.
+    </p>
+
+    <h3>10. Conteúdo e propriedade intelectual</h3>
+    <p>
+      O nome seufaztudo, identidade visual, layout, textos institucionais, estrutura do
+      sistema, banco de dados, lógicas de negócio, código-fonte, scripts, APIs, fluxos,
+      recursos visuais e demais elementos da plataforma são protegidos pela legislação
+      aplicável de propriedade intelectual.
+    </p>
+    <p>
+      É proibido copiar, reproduzir, distribuir, sublicenciar, fazer scraping, engenharia
+      reversa, adaptar, clonar ou explorar economicamente qualquer parte da plataforma
+      sem autorização prévia e expressa do titular dos direitos.
+    </p>
+
+    <h3>11. Conteúdo de terceiros</h3>
+    <p>
+      Perfis, descrições, avaliações, mensagens, números de contato, preços e demais
+      informações inseridas por usuários ou prestadores são de responsabilidade exclusiva
+      de quem as publica.
+    </p>
+
+    <h3>12. Limitação de responsabilidade</h3>
+    <p>
+      Na máxima extensão permitida pela legislação aplicável, o seufaztudo não responde por:
+    </p>
+    <ul>
+      <li>conduta, omissão, atraso, erro técnico, negligência, imprudência, imperícia, golpe, fraude ou inadimplemento de usuário ou prestador;</li>
+      <li>qualidade, segurança, adequação, legalidade, preço, prazo ou resultado do serviço contratado entre as partes;</li>
+      <li>lucros cessantes, perda de chance, danos indiretos ou danos decorrentes de negociação direta entre usuário e prestador;</li>
+      <li>indisponibilidade temporária da plataforma, falhas de internet, terceiros, gateways, provedores, serviços externos ou caso fortuito/força maior.</li>
+    </ul>
+    <p>
+      Nada nestes Termos exclui responsabilidade que a lei impeça de excluir.
+    </p>
+
+    <h3>13. Moderação, suspensão e exclusão</h3>
+    <p>
+      O seufaztudo poderá, a seu critério e sem aviso prévio quando necessário para
+      segurança, investigar, restringir, suspender ou encerrar contas, anúncios,
+      chamados, conteúdos ou acessos que violem a lei, estes Termos ou coloquem
+      terceiros e a plataforma em risco.
+    </p>
+
+    <h3>14. Canal de contato</h3>
+    <p>
+      Para dúvidas jurídicas, notificações, denúncias, direitos de titular de dados
+      e solicitações relacionadas à plataforma, utilize:
+      <strong>juridico@seufaztudo.com.br</strong> e
+      <strong>privacidade@seufaztudo.com.br</strong>.
+    </p>
+
+    <h3>15. Lei aplicável e foro</h3>
+    <p>
+      Estes Termos são regidos pela legislação brasileira. O foro será o legalmente
+      competente, observadas as normas aplicáveis de proteção do consumidor e as regras
+      processuais vigentes.
+    </p>
+  </div>
+</section>
+
+<!-- POLÍTICA DE PRIVACIDADE -->
+<section class="screen" id="screen-privacy">
+  <div class="card legal-page">
+    <h2>Política de Privacidade</h2>
+    <p class="muted">Última atualização: 21/03/2026</p>
+
+    <h3>1. Introdução</h3>
+    <p>
+      Esta Política de Privacidade explica como o seufaztudo coleta, utiliza, armazena,
+      compartilha e protege dados pessoais no contexto da utilização da plataforma,
+      observando a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018),
+      o Marco Civil da Internet e demais normas aplicáveis.
+    </p>
+
+    <h3>2. Quem é o controlador</h3>
+    <p>
+      Controlador dos dados pessoais tratados no contexto da plataforma:
+      <strong>[PREENCHER NOME / RAZÃO SOCIAL]</strong>,
+      <strong>[PREENCHER CPF OU CNPJ]</strong>,
+      e-mail de contato: <strong>privacidade@seufaztudo.com.br</strong>.
+    </p>
+
+    <h3>3. Dados que podemos coletar</h3>
+    <ul>
+      <li>dados cadastrais, como nome, email, telefone e WhatsApp;</li>
+      <li>dados de conta e autenticação;</li>
+      <li>dados profissionais e comerciais do prestador, como serviço principal, descrição, preço médio, raio de atendimento e experiência;</li>
+      <li>dados de geolocalização e coordenadas quando você autoriza o uso de localização;</li>
+      <li>dados de uso, navegação, interações, cliques, visualizações, chamados, respostas e registros técnicos;</li>
+      <li>dados relacionados a pagamentos de funcionalidades da plataforma;</li>
+      <li>comunicações enviadas por formulários, suporte, denúncias ou solicitações de privacidade.</li>
+    </ul>
+
+    <h3>4. Finalidades do tratamento</h3>
+    <ul>
+      <li>criar, manter e autenticar contas;</li>
+      <li>exibir perfis profissionais e conectar usuários a prestadores;</li>
+      <li>permitir busca por proximidade e envio de chamados urgentes;</li>
+      <li>processar compras de funcionalidades pagas da plataforma;</li>
+      <li>prevenir fraude, abuso, spam e incidentes de segurança;</li>
+      <li>cumprir obrigações legais, regulatórias e requisições legítimas;</li>
+      <li>atender solicitações, suporte, denúncias e direitos do titular;</li>
+      <li>gerar métricas, estatísticas, auditoria e melhoria da plataforma.</li>
+    </ul>
+
+    <h3>5. Bases legais</h3>
+    <p>O tratamento poderá ocorrer com fundamento, conforme o caso, em:</p>
+    <ul>
+      <li>execução de contrato ou de procedimentos preliminares relacionados ao uso da plataforma;</li>
+      <li>cumprimento de obrigação legal ou regulatória;</li>
+      <li>exercício regular de direitos em processo, contrato ou procedimento;</li>
+      <li>legítimo interesse, observadas as salvaguardas aplicáveis;</li>
+      <li>consentimento, quando necessário ou quando expressamente solicitado.</li>
+    </ul>
+
+    <h3>6. Geolocalização</h3>
+    <p>
+      Quando o usuário escolhe utilizar recursos de localização, os dados poderão ser
+      tratados para busca de prestadores próximos, cálculo de distância, ranqueamento,
+      chamados urgentes e demais funcionalidades compatíveis com a finalidade informada.
+    </p>
+    <p>
+      Caso a localização não seja concedida, algumas funções podem não operar corretamente.
+    </p>
+
+    <h3>7. Compartilhamento de dados</h3>
+    <p>Os dados poderão ser compartilhados, quando necessário, com:</p>
+    <ul>
+      <li>prestadores e usuários envolvidos na intermediação do serviço;</li>
+      <li>provedores de infraestrutura, autenticação, banco de dados e hospedagem;</li>
+      <li>gateways, processadores e parceiros de pagamento;</li>
+      <li>fornecedores de segurança, análise, antifraude, suporte e comunicação;</li>
+      <li>autoridades públicas, judiciais, administrativas ou regulatórias, quando exigido.</li>
+    </ul>
+
+    <h3>8. Armazenamento e retenção</h3>
+    <p>
+      Os dados serão mantidos pelo tempo necessário para cumprir as finalidades do tratamento,
+      atender exigências legais, regulatórias, contratuais, de auditoria, prevenção a fraude
+      e exercício regular de direitos.
+    </p>
+    <p>
+      Quando cabível, os dados serão eliminados, anonimizados ou bloqueados após o término
+      do tratamento, observadas as hipóteses legais de retenção.
+    </p>
+
+    <h3>9. Segurança</h3>
+    <p>
+      O seufaztudo adota medidas técnicas e administrativas razoáveis para proteção dos dados
+      pessoais contra acessos não autorizados, destruição, perda, alteração, comunicação ou
+      difusão indevida.
+    </p>
+    <p>
+      Apesar disso, nenhum sistema é absolutamente inviolável e não é possível garantir
+      segurança total contra todos os riscos.
+    </p>
+
+    <h3>10. Direitos do titular</h3>
+    <p>Nos termos da LGPD e conforme aplicável, você poderá solicitar:</p>
+    <ul>
+      <li>confirmação da existência de tratamento;</li>
+      <li>acesso aos dados;</li>
+      <li>correção de dados incompletos, inexatos ou desatualizados;</li>
+      <li>anonimização, bloqueio ou eliminação, nas hipóteses cabíveis;</li>
+      <li>portabilidade, quando aplicável;</li>
+      <li>informação sobre compartilhamentos;</li>
+      <li>informação sobre consentimento e revogação, quando essa for a base legal;</li>
+      <li>revisão de decisões automatizadas, quando cabível.</li>
+    </ul>
+
+    <h3>11. Canal para privacidade</h3>
+    <p>
+      Solicitações relacionadas a dados pessoais podem ser encaminhadas para
+      <strong>privacidade@seufaztudo.com.br</strong>.
+    </p>
+
+    <h3>12. Cookies e tecnologias semelhantes</h3>
+    <p>
+      A plataforma poderá utilizar cookies, armazenamento local e tecnologias similares
+      para autenticação, segurança, funcionamento, personalização e métricas.
+    </p>
+
+    <h3>13. Transferências e terceiros</h3>
+    <p>
+      Alguns fornecedores podem processar dados em infraestrutura própria, inclusive fora do
+      estado ou país do usuário, sempre dentro de bases legais e medidas contratuais compatíveis.
+    </p>
+
+    <h3>14. Incidentes de segurança</h3>
+    <p>
+      Caso ocorra incidente de segurança que possa acarretar risco ou dano relevante aos titulares,
+      o seufaztudo adotará as providências legalmente exigidas, inclusive comunicações cabíveis.
+    </p>
+
+    <h3>15. Alterações desta política</h3>
+    <p>
+      Esta Política poderá ser atualizada a qualquer tempo. A versão vigente será a publicada
+      na plataforma na data de sua última atualização.
+    </p>
+  </div>
+</section>
+
+<!-- POLÍTICA DE PAGAMENTOS -->
+<section class="screen" id="screen-payments">
+  <div class="card legal-page">
+    <h2>Política de Pagamentos</h2>
+    <p class="muted">Última atualização: 21/03/2026</p>
+
+    <h3>1. Objeto</h3>
+    <p>
+      Esta política regula as compras de funcionalidades digitais oferecidas pelo seufaztudo,
+      como destaque, boost, assinatura, impulsionamento ou recursos equivalentes.
+    </p>
+
+    <h3>2. Intermediação financeira</h3>
+    <p>
+      Os pagamentos podem ser processados por terceiros especializados. O seufaztudo poderá
+      utilizar intermediadores, gateways, provedores antifraude e parceiros tecnológicos
+      para viabilizar a cobrança.
+    </p>
+
+    <h3>3. Ativação</h3>
+    <p>
+      A ativação do benefício contratado depende de confirmação do pagamento, validação
+      antifraude, consistência cadastral e ausência de bloqueios operacionais ou jurídicos.
+    </p>
+
+    <h3>4. Escopo do que está sendo comprado</h3>
+    <p>
+      O que o usuário compra é um recurso digital da plataforma. O seufaztudo não garante,
+      como resultado da compra, aumento certo de faturamento, número mínimo de contatos,
+      quantidade de visualizações, contratos fechados ou retorno financeiro.
+    </p>
+
+    <h3>5. Prazo e vigência</h3>
+    <p>
+      Recursos pagos possuem prazo determinado conforme informado no momento da contratação
+      e passam a contar a partir da ativação efetiva, salvo disposição específica em contrário.
+    </p>
+
+    <h3>6. Reembolsos e estornos</h3>
+    <p>
+      Pedidos de reembolso, estorno ou cancelamento serão analisados caso a caso, conforme
+      a natureza do serviço digital contratado, a legislação aplicável, a etapa de uso do
+      recurso, evidências técnicas, prevenção a fraude e políticas operacionais válidas.
+    </p>
+    <p>
+      Não haverá reembolso automático por mera expectativa comercial não atingida, quando o
+      recurso digital contratado tiver sido efetivamente disponibilizado ou utilizado.
+    </p>
+
+    <h3>7. Chargeback, fraude e contestação</h3>
+    <p>
+      O seufaztudo poderá suspender benefícios, restringir contas, reter ativações futuras,
+      bloquear novos pagamentos e adotar medidas administrativas ou judiciais em caso de
+      suspeita de fraude, contestação abusiva, uso indevido de meios de pagamento, chargeback
+      malicioso, falsidade cadastral ou violação destes termos.
+    </p>
+
+    <h3>8. Inadimplência e falha operacional</h3>
+    <p>
+      Em caso de falha do meio de pagamento, inconsistência de processamento, cancelamento
+      do pagamento, recusa antifraude, chargeback ou ausência de confirmação financeira,
+      o seufaztudo poderá deixar de ativar, suspender ou cancelar o benefício contratado.
+    </p>
+
+    <h3>9. Alteração de preço</h3>
+    <p>
+      Os preços poderão ser alterados a qualquer momento para novas contratações, sem prejuízo
+      das compras já confirmadas antes da alteração.
+    </p>
+  </div>
+</section>
+
+<!-- AVISO LEGAL -->
+<section class="screen" id="screen-legal">
+  <div class="card legal-page">
+    <h2>Aviso Legal</h2>
+    <p class="muted">Última atualização: 21/03/2026</p>
+
+    <p>
+      O seufaztudo é uma plataforma de intermediação digital e não executa os serviços
+      anunciados por prestadores cadastrados.
+    </p>
+    <p>
+      A plataforma não substitui a verificação individual que o usuário deve realizar
+      antes de contratar um prestador, inclusive quanto à identidade, reputação,
+      capacitação, regularidade profissional, referências, orçamento, prazo e garantias.
+    </p>
+    <p>
+      O seufaztudo não presta garantia sobre qualidade, adequação, licitude, segurança,
+      pontualidade, disponibilidade, preço, resultado, regularidade fiscal, emissão de
+      nota fiscal ou conformidade técnica do serviço oferecido por terceiros.
+    </p>
+    <p>
+      As informações exibidas em perfis, descrições, preços, disponibilidade, tempo de
+      resposta, área de cobertura e avaliações podem depender de dados fornecidos por
+      terceiros e podem conter desatualizações, inconsistências ou omissões.
+    </p>
+    <p>
+      Sempre que possível, o usuário deve formalizar condições do serviço diretamente
+      com o prestador antes da execução.
+    </p>
+  </div>
+</section>
+
+
+  </main>
+
+  <template id="providerCardTemplate">
+    <article class="provider-card">
+      <div class="provider-top">
+        <div>
+          <h4 class="provider-name"></h4>
+          <p class="provider-service"></p>
+        </div>
+        <div class="provider-badges"></div>
+      </div>
+
+      <p class="provider-description"></p>
+
+      <div class="provider-meta"></div>
+
+      <div class="provider-actions">
+        <button class="btn btn-secondary btn-view-profile" type="button">Ver perfil</button>
+        <a class="btn btn-whatsapp" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+      </div>
+    </article>
+  </template>
+
+    <footer class="footer">
+      <div class="footer-legal">
+        <p><strong>seufaztudo</strong> é uma plataforma de intermediação digital entre usuários e prestadores independentes.</p>
+        <p>
+          © <span id="footerYear">2026</span> seufaztudo. Todos os direitos reservados.
+          É proibida a reprodução, cópia, engenharia reversa, extração de banco de dados,
+          scraping, clonagem, reutilização de layout, código, lógica de negócio, marca,
+          identidade visual ou funcionalidades sem autorização prévia e expressa.
+        </p>
+      </div>
+
+      <div class="footer-links">
+        <a href="#" data-route="terms">Termos de Uso</a>
+        <a href="#" data-route="privacy">Privacidade</a>
+        <a href="#" data-route="payments">Pagamentos</a>
+        <a href="#" data-route="legal">Aviso Legal</a>
+      </div>
+
+      <p class="small-muted">
+        Contato jurídico: juridico@seufaztudo.com.br • Privacidade: privacidade@seufaztudo.com.br
+      </p>
+    </footer>
+
+  <script src="config.js"></script>
+  <script src="supabase.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
