@@ -15,7 +15,91 @@ const state = {
   realtimeChannels: []
 };
 
-const routes = ["home", "login", "register", "dashboard", "urgent", "terms", "privacy", "payments", "legal"];
+const routes = ["home", "login", "register", "dashboard", "urgent", "terms", "privacy", "payments", "legal", "admin"];
+
+const ADMIN_EMAILS = [
+  "contato@seufaztudo.com.br",
+  "gabrieldacosta717@gmail.com"
+];
+
+const SERVICE_ALIASES = {
+  "eletricista": "Eletricista",
+  "encanador": "Encanador",
+  "bombeiro hidraulico": "Encanador",
+  "bombeiro hidráulico": "Encanador",
+  "pedreiro": "Pedreiro",
+  "pintor": "Pintor",
+  "diarista": "Diarista",
+  "faxineira": "Diarista",
+  "faxineiro": "Diarista",
+  "montador de moveis": "Montador de móveis",
+  "montador de móveis": "Montador de móveis",
+  "marceneiro": "Marceneiro",
+  "chaveiro": "Chaveiro",
+  "jardineiro": "Jardineiro",
+  "vidraceiro": "Vidraceiro",
+  "tecnico de informatica": "Técnico de informática",
+  "técnico de informática": "Técnico de informática",
+  "instalador de ar condicionado": "Instalador de ar-condicionado",
+  "instalador de ar-condicionado": "Instalador de ar-condicionado",
+  "mecanico": "Mecânico",
+  "mecânico": "Mecânico",
+  "borracheiro": "Borracheiro",
+  "motorista": "Motorista",
+  "entregador": "Entregador",
+  "passeador de caes": "Passeador de cães",
+  "passeador de cães": "Passeador de cães",
+  "personal": "Personal trainer",
+  "personal trainer": "Personal trainer",
+  "baba": "Babá",
+  "babá": "Babá",
+  "cuidador de idosos": "Cuidador de idosos",
+  "freteiro": "Freteiro",
+  "serralheiro": "Serralheiro",
+  "soldador": "Soldador",
+  "gesseiro": "Gesseiro",
+  "azulejista": "Azulejista",
+  "tecnico em celular": "Técnico em celular",
+  "técnico em celular": "Técnico em celular",
+  "fotografo": "Fotógrafo",
+  "fotógrafo": "Fotógrafo",
+  "professor particular": "Professor particular",
+  "manicure": "Manicure",
+  "cabeleireiro": "Cabeleireiro",
+  "maquiador": "Maquiador"
+};
+
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeService(value) {
+  const normalized = normalizeText(value);
+  return SERVICE_ALIASES[normalized] || safeTrim(value, 120);
+}
+
+function setupPasswordToggles() {
+  document.querySelectorAll("[data-toggle-password]").forEach(button => {
+    button.addEventListener("click", () => {
+      const inputId = button.getAttribute("data-toggle-password");
+      const input = document.getElementById(inputId);
+      if (!input) return;
+
+      const showing = input.type === "text";
+      input.type = showing ? "password" : "text";
+      button.textContent = showing ? "Mostrar" : "Ocultar";
+    });
+  });
+}
+
+function isAdminUser() {
+  const email = state.currentUser?.email || "";
+  return ADMIN_EMAILS.includes(email.toLowerCase());
+}
 
 function $(id) {
   return document.getElementById(id);
@@ -56,12 +140,86 @@ function navigate(route) {
 
 function refreshAuthUI() {
   const logged = !!state.currentUser;
+  const isAdmin = isAdminUser();
 
   $("btnDashboard")?.classList.toggle("hidden", !logged);
   $("btnLogout")?.classList.toggle("hidden", !logged);
+  $("btnAdmin")?.classList.toggle("hidden", !logged || !isAdmin);
 
   document.querySelector('[data-route="login"]')?.classList.toggle("hidden", logged);
   document.querySelector('[data-route="register"]')?.classList.toggle("hidden", logged);
+}
+
+function bindAdmin() {
+  $("btnLoadAdminProviders")?.addEventListener("click", async () => {
+    await loadAdminProviders();
+  });
+}
+
+async function loadAdminProviders() {
+  if (!isAdminUser()) {
+    showAlert("Acesso negado ao painel admin.", "error");
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("prestadores")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    renderAdminProviders(data || []);
+  } catch (error) {
+    console.error(error);
+    showAlert(error.message || "Erro ao carregar prestadores.", "error");
+  }
+}
+
+function renderAdminProviders(providers) {
+  const container = $("adminProvidersList");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  if (!providers.length) {
+    container.innerHTML = `
+      <div class="card">
+        <h3>Nenhum prestador encontrado</h3>
+      </div>
+    `;
+    return;
+  }
+
+  providers.forEach(provider => {
+    const article = document.createElement("article");
+    article.className = "provider-card";
+
+    article.innerHTML = `
+      <div class="provider-top">
+        <div>
+          <h4 class="provider-name">${escapeHtml(provider.nome || "Sem nome")}</h4>
+          <p class="provider-service">${escapeHtml(provider.servico || "Sem serviço")}</p>
+        </div>
+        <div class="provider-badges">
+          ${provider.bloqueado ? `<span class="badge badge-emergency">Bloqueado</span>` : `<span class="badge badge-boost">Ativo</span>`}
+        </div>
+      </div>
+
+      <div class="provider-meta">
+        <span class="meta-pill">${escapeHtml(provider.email || "Sem email")}</span>
+        <span class="meta-pill">${escapeHtml(provider.whatsapp || "Sem WhatsApp")}</span>
+        <span class="meta-pill">⭐ ${Number(provider.avaliacao_media || 0).toFixed(1)}</span>
+        <span class="meta-pill">${Number(provider.visualizacoes || 0)} views</span>
+        <span class="meta-pill">${Number(provider.cliques_whatsapp || 0)} cliques</span>
+      </div>
+
+      <p class="provider-description">${escapeHtml(provider.descricao || "Sem descrição.")}</p>
+    `;
+
+    container.appendChild(article);
+  });
 }
 
 function formatCoords(lat, lng) {
@@ -458,6 +616,12 @@ function bindLogin() {
 
     const email = $("loginEmail").value.trim();
     const password = $("loginPassword").value;
+    const passwordConfirm = $("loginPasswordConfirm").value;
+
+     if (password !== passwordConfirm) {
+      showAlert("As duas senhas do login precisam ser iguais.", "error");
+      return;
+    }
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -472,9 +636,31 @@ function bindLogin() {
     state.currentUser = data.user || null;
     await loadMyProvider();
     refreshAuthUI();
-    navigate("dashboard");
+    navigate(isAdminUser() ? "admin" : "dashboard");
     showAlert("Login realizado com sucesso.", "success");
   });
+
+  $("btnForgotPassword")?.addEventListener("click", async () => {
+    const email = $("loginEmail").value.trim();
+
+    if (!isValidEmail(email)) {
+      showAlert("Digite seu email antes de usar a recuperação de senha.", "error");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin
+      });
+
+      if (error) throw error;
+
+      showAlert("Enviamos o link de recuperação para seu email.", "success");
+    } catch (error) {
+      showAlert(error.message || "Erro ao enviar email de recuperação.", "error");
+    }
+  });
+
 }
 
 function isValidEmail(value) {
@@ -519,12 +705,15 @@ function bindRegister() {
       return;
     }
 
+    const rawService = $("registerService").value;
+
     const payload = {
       nome: safeTrim($("registerName").value, 120),
       email: safeTrim($("registerEmail").value, 160),
       password: $("registerPassword").value,
+      passwordConfirm: $("registerPasswordConfirm").value,
       whatsapp: safeTrim($("registerWhatsapp").value, 20),
-      servico: safeTrim($("registerService").value, 120),
+      servico: normalizeService(rawService),
       experiencia_anos: toPositiveNumber($("registerExperience").value),
       preco_medio: toPositiveNumber($("registerPrice").value),
       raio_km: toPositiveNumber($("registerRadius").value),
@@ -546,6 +735,11 @@ function bindRegister() {
 
     if (!payload.password || payload.password.length < 6) {
       showAlert("A senha deve ter pelo menos 6 caracteres.", "error");
+      return;
+    }
+
+    if (payload.password !== payload.passwordConfirm) {
+      showAlert("As senhas do cadastro não coincidem.", "error");
       return;
     }
 
@@ -667,7 +861,7 @@ function bindDashboard() {
     const updated = {
       nome: $("profileName").value.trim(),
       whatsapp: $("profileWhatsapp").value.trim(),
-      servico: $("profileService").value.trim(),
+      servico: normalizeService($("profileService").value),
       experiencia_anos: Number($("profileExperience").value || 0),
       preco_medio: Number($("profilePrice").value || 0),
       raio_km: Number($("profileRadius").value || 10),
@@ -712,6 +906,43 @@ function bindDashboard() {
 
   $("btnRefreshUrgentRequests")?.addEventListener("click", async () => {
     await loadProviderUrgentCalls();
+  });
+}
+
+function bindChangePassword() {
+  $("formChangePassword")?.addEventListener("submit", async event => {
+    event.preventDefault();
+
+    if (!state.currentUser) {
+      showAlert("Faça login para alterar a senha.", "error");
+      return;
+    }
+
+    const newPassword = $("newPassword").value;
+    const confirmNewPassword = $("confirmNewPassword").value;
+
+    if (newPassword.length < 6) {
+      showAlert("A nova senha deve ter pelo menos 6 caracteres.", "error");
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      showAlert("A confirmação da nova senha não confere.", "error");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) throw error;
+
+      $("formChangePassword").reset();
+      showAlert("Senha atualizada com sucesso.", "success");
+    } catch (error) {
+      showAlert(error.message || "Erro ao atualizar senha.", "error");
+    }
   });
 }
 
@@ -843,7 +1074,8 @@ async function createUrgentCall() {
         latitude: state.urgentLocation.latitude,
         longitude: state.urgentLocation.longitude,
         location: `POINT(${state.urgentLocation.longitude} ${state.urgentLocation.latitude})`,
-        status: "aberto"
+        status: "aberto",
+        expira_em: new Date(Date.now() + 30 * 60 * 1000).toISOString()
       })
       .select()
       .single();
@@ -1052,7 +1284,8 @@ async function loadProviderUrgentCalls() {
         descricao,
         status,
         prestador_escolhido_id,
-        created_at
+        created_at,
+        expira_em
       )
     `)
     .eq("prestador_id", state.currentProviderProfile.id)
@@ -1066,8 +1299,22 @@ async function loadProviderUrgentCalls() {
   }
 
   state.providerUrgentCalls = (data || [])
-    .map(item => item.chamado)
-    .filter(Boolean);
+  .map(item => item.chamado)
+  .filter(Boolean);
+
+  for (const call of state.providerUrgentCalls) {
+    if (call.status === "aberto" && call.expira_em && new Date(call.expira_em) <= new Date()) {
+      await supabase
+        .from("chamados")
+        .update({ status: "expirado", encerrado_em: new Date().toISOString() })
+        .eq("id", call.id)
+        .eq("status", "aberto");
+
+      call.status = "expirado";
+    }
+  }
+
+  state.providerUrgentCalls = state.providerUrgentCalls.filter(call => call.status === "aberto");
 
   renderProviderUrgentCalls(state.providerUrgentCalls);
 }
@@ -1207,7 +1454,8 @@ async function loadMyUrgentResponses() {
       chamado:chamados(
         id,
         status,
-        prestador_escolhido_id
+        prestador_escolhido_id,
+        expira_em
       ),
       prestador:prestadores (
         id,
@@ -1238,9 +1486,25 @@ function renderUrgentResponses(responses) {
   const container = $("urgentResponsesList");
   container.innerHTML = "";
 
+  const expirado =
+  responses.length > 0 &&
+  responses[0].chamado?.status === "aberto" &&
+  responses[0].chamado?.expira_em &&
+  new Date(responses[0].chamado.expira_em) <= new Date();
+
   const fechado =
     state.myUrgentCallId &&
     responses.some(response => response.chamado?.status === "fechado");
+
+    if (expirado) {
+      container.innerHTML = `
+        <div class="card">
+          <h3>Chamado expirado</h3>
+          <p class="muted">Nenhum prestador foi escolhido a tempo. Você pode criar um novo chamado.</p>
+        </div>
+      `;
+      return;
+    }
 
   if (!responses.length) {
     container.innerHTML = `
@@ -1544,6 +1808,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindDashboard();
   bindUrgent();
   bindPayments();
+
+  bindAdmin();
+
+  bindChangePassword();
+  setupPasswordToggles();
 
   await restoreSession();
   await fetchProviders();

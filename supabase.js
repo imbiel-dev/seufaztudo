@@ -1,19 +1,13 @@
-let supabase = null;
-
-function initializeSupabase() {
+(function initializeSupabase() {
   const { supabaseUrl, supabaseAnonKey } = APP_CONFIG;
 
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error("Supabase não configurado");
-    return null;
+    return;
   }
 
-  supabase = window.supabase.createClient(
+  window.supabase = window.supabase.createClient(
     supabaseUrl,
     supabaseAnonKey
   );
-
-  return supabase;
-}
-
-initializeSupabase();
+})();

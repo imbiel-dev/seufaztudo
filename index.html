@@ -6,11 +6,12 @@
   <title>seufaztudo</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="icon" type="image/png" href="img/logo.png" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <div class="brand-badge">A</div>
+      <img src="img/logo.png" alt="Logo seufaztudo" class="brand-logo" />
       <div>
         <h1>seufaztudo</h1>
         <p>Encontre prestadores perto de você</p>
@@ -24,12 +25,25 @@
       <button class="nav-btn" data-route="register">Cadastrar prestador</button>
       <button class="nav-btn hidden" id="btnDashboard" data-route="dashboard">Dashboard</button>
       <button class="nav-btn hidden" id="btnLogout">Sair</button>
+      <button class="nav-btn hidden" id="btnAdmin" data-route="admin">Admin</button>
     </nav>
   </header>
 
   <main class="container">
     <section id="alertBox" class="alert hidden"></section>
 
+    <section class="screen" id="screen-admin">
+      <div class="card">
+        <h2>Painel administrativo</h2>
+        <p class="muted">Lista de prestadores cadastrados.</p>
+
+        <div class="actions">
+          <button id="btnLoadAdminProviders" class="btn" type="button">Carregar prestadores</button>
+        </div>
+
+        <div id="adminProvidersList" class="providers-list"></div>
+      </div>
+    </section>
     <!-- HOME -->
     <section class="screen active" id="screen-home">
       <div class="hero">
@@ -102,10 +116,27 @@
 
           <div class="field">
             <label for="loginPassword">Senha</label>
-            <input id="loginPassword" type="password" placeholder="Sua senha" required />
+            <div class="password-wrap">
+              <input id="loginPassword" type="password" placeholder="Sua senha" required />
+              <button type="button" class="password-toggle" data-toggle-password="loginPassword">👁</button>
+            </div>
           </div>
 
-          <button type="submit" class="btn w-full">Entrar</button>
+          <div class="field">
+            <label for="loginPasswordConfirm">Confirme sua senha</label>
+            <div class="password-wrap">
+              <input id="loginPasswordConfirm" type="password" placeholder="Digite a senha novamente" required />
+              <button type="button" class="password-toggle" data-toggle-password="loginPasswordConfirm">👁</button>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="btn w-full">Entrar</button>
+          </div>
+
+          <div class="auth-links">
+            <button type="button" id="btnForgotPassword" class="link-btn">Esqueci minha senha</button>
+          </div>
         </form>
       </div>
     </section>
@@ -132,7 +163,18 @@
 
             <div class="field">
               <label for="registerPassword">Senha</label>
-              <input id="registerPassword" type="password" placeholder="Crie uma senha" required />
+              <div class="password-wrap">
+                <input id="registerPassword" type="password" placeholder="Crie uma senha" required />
+                <button type="button" class="password-toggle" data-toggle-password="registerPassword">👁</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="registerPasswordConfirm">Confirme sua senha</label>
+              <div class="password-wrap">
+                <input id="registerPasswordConfirm" type="password" placeholder="Digite a senha novamente" required />
+                <button type="button" class="password-toggle" data-toggle-password="registerPasswordConfirm">👁</button>
+              </div>
             </div>
 
             <div class="field">
@@ -142,7 +184,41 @@
 
             <div class="field">
               <label for="registerService">Serviço principal</label>
-              <input id="registerService" type="text" placeholder="Ex: eletricista" required />
+              <input id="registerService" list="servicesList" type="text" placeholder="Ex: eletricista" required />
+              <datalist id="servicesList">
+                <option value="Eletricista"></option>
+                <option value="Encanador"></option>
+                <option value="Pedreiro"></option>
+                <option value="Pintor"></option>
+                <option value="Diarista"></option>
+                <option value="Faxineira"></option>
+                <option value="Montador de móveis"></option>
+                <option value="Marceneiro"></option>
+                <option value="Chaveiro"></option>
+                <option value="Jardineiro"></option>
+                <option value="Vidraceiro"></option>
+                <option value="Técnico de informática"></option>
+                <option value="Instalador de ar-condicionado"></option>
+                <option value="Mecânico"></option>
+                <option value="Borracheiro"></option>
+                <option value="Motorista"></option>
+                <option value="Entregador"></option>
+                <option value="Passeador de cães"></option>
+                <option value="Personal trainer"></option>
+                <option value="Babá"></option>
+                <option value="Cuidador de idosos"></option>
+                <option value="Freteiro"></option>
+                <option value="Serralheiro"></option>
+                <option value="Soldador"></option>
+                <option value="Gesseiro"></option>
+                <option value="Azulejista"></option>
+                <option value="Técnico em celular"></option>
+                <option value="Fotógrafo"></option>
+                <option value="Professor particular"></option>
+                <option value="Manicure"></option>
+                <option value="Cabeleireiro"></option>
+                <option value="Maquiador"></option>
+              </datalist>
             </div>
 
             <div class="field">
@@ -269,6 +345,30 @@
         <h3>Meu perfil</h3>
 
         <form id="formProfile">
+          <div class="card">
+            <h3>Alterar senha</h3>
+
+            <form id="formChangePassword">
+              <div class="field">
+                <label for="newPassword">Nova senha</label>
+                <div class="password-wrap">
+                  <input id="newPassword" type="password" placeholder="Nova senha" required />
+                  <button type="button" class="password-toggle" data-toggle-password="newPassword">👁</button>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="confirmNewPassword">Confirme a nova senha</label>
+                <div class="password-wrap">
+                  <input id="confirmNewPassword" type="password" placeholder="Digite novamente" required />
+                  <button type="button" class="password-toggle" data-toggle-password="confirmNewPassword">👁</button>
+                </div>
+              </div>
+
+              <button type="submit" class="btn w-full">Atualizar senha</button>
+            </form>
+          </div>
+
           <div class="grid-2">
             <div class="field">
               <label for="profileName">Nome</label>

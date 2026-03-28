@@ -86,16 +86,54 @@ button {
   font-size: 0.9rem;
 }
 
-.brand-badge {
-  width: 46px;
-  height: 46px;
+.brand-logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--primary), #14b8a6);
-  display: grid;
-  place-items: center;
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: white;
+  background: rgba(255,255,255,0.04);
+  padding: 4px;
+}
+
+.password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-wrap input {
+  padding-right: 52px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.password-toggle:hover {
+  color: var(--text);
+}
+
+.auth-links {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+.link-btn {
+  border: none;
+  background: transparent;
+  color: #86efac;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  padding: 0;
 }
 
 .topnav {
