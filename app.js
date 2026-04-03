@@ -26,6 +26,8 @@ const ADMIN_EMAILS = [
   "contato.seufaztudo@gmail.com"
 ];
 
+const PENDING_PROVIDER_PROFILE_KEY = "seufaztudo_pending_provider_profile";
+
 const SERVICE_ALIASES = {
   "eletricista": "Eletricista",
   "encanador": "Encanador",
@@ -274,6 +276,103 @@ function setupPasswordToggles() {
 function isAdminUser() {
   const email = state.currentUser?.email || "";
   return ADMIN_EMAILS.includes(email.toLowerCase());
+}
+
+function savePendingProviderProfile(payload) {
+  if (!payload) return;
+  localStorage.setItem(PENDING_PROVIDER_PROFILE_KEY, JSON.stringify(payload));
+}
+
+function getPendingProviderProfile() {
+  try {
+    const raw = localStorage.getItem(PENDING_PROVIDER_PROFILE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function clearPendingProviderProfile() {
+  localStorage.removeItem(PENDING_PROVIDER_PROFILE_KEY);
+}
+
+function sanitizeProviderInsertPayload(payload, userId) {
+  return {
+    user_id: userId,
+    email: safeTrim(payload?.email, 160),
+    nome: safeTrim(payload?.nome, 120),
+    descricao: safeTrim(payload?.descricao, 1000),
+    servico: safeTrim(payload?.servico, 120),
+    servicos: Array.isArray(payload?.servicos) ? payload.servicos.slice(0, 20) : [],
+    experiencia_anos: Number(payload?.experiencia_anos || 0),
+    preco_medio: Number(payload?.preco_medio || 0),
+    whatsapp: normalizeWhatsappBR(payload?.whatsapp),
+    atende_emergencia: !!payload?.atende_emergencia,
+    raio_km: Number(payload?.raio_km || 0),
+    latitude: Number(payload?.latitude),
+    longitude: Number(payload?.longitude),
+    location: `POINT(${Number(payload?.longitude)} ${Number(payload?.latitude)})`,
+    assinatura_ate: payload?.assinatura_ate || null,
+    boost_ativo: !!payload?.boost_ativo,
+    avaliacao_media: Number(payload?.avaliacao_media || 0),
+    visualizacoes: Number(payload?.visualizacoes || 0),
+    cliques_whatsapp: Number(payload?.cliques_whatsapp || 0)
+  };
+}
+
+async function ensureProviderProfileForCurrentUser() {
+  if (!supabase || !state.currentUser) return null;
+
+  const pending = getPendingProviderProfile();
+  if (!pending) return null;
+
+  const pendingEmail = String(pending.email || "").toLowerCase();
+  const currentEmail = String(state.currentUser.email || "").toLowerCase();
+
+  if (!pendingEmail || pendingEmail !== currentEmail) {
+    return null;
+  }
+
+  const { data: existingProfile, error: existingError } = await supabase
+    .from("prestadores")
+    .select("*")
+    .eq("user_id", state.currentUser.id)
+    .maybeSingle();
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  if (existingProfile) {
+    clearPendingProviderProfile();
+    return existingProfile;
+  }
+
+  const insertPayload = sanitizeProviderInsertPayload(pending, state.currentUser.id);
+
+  const { error: insertError } = await supabase
+    .from("prestadores")
+    .insert(insertPayload);
+
+  if (insertError) {
+    throw insertError;
+  }
+
+  const { data: createdProfile, error: createdError } = await supabase
+    .from("prestadores")
+    .select("*")
+    .eq("user_id", state.currentUser.id)
+    .maybeSingle();
+
+  if (createdError) {
+    throw createdError;
+  }
+
+  if (createdProfile) {
+    clearPendingProviderProfile();
+  }
+
+  return createdProfile || null;
 }
 
 function $(id) {
@@ -714,6 +813,20 @@ function bindNavigation() {
         return;
       }
 
+      if (route === "admin") {
+        if (!state.currentUser) {
+          showAlert("Faça login para acessar o painel admin.", "error");
+          navigate("login");
+          return;
+        }
+
+        if (!isAdminUser()) {
+          showAlert("Acesso negado ao painel admin.", "error");
+          navigate("home");
+          return;
+        }
+      }
+
       navigate(route);
     });
   });
@@ -721,18 +834,27 @@ function bindNavigation() {
   $("btnLogout")?.addEventListener("click", async () => {
     if (!supabase) return;
 
-    const { error } = await supabase.auth.signOut();
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
 
-    if (error) {
-      showAlert(error.message, "error");
-      return;
+      if (error) throw error;
+
+      state.currentUser = null;
+      state.currentProviderProfile = null;
+      state.isEditingProfile = false;
+      state.profileDraftBackup = null;
+      state.providerUrgentCalls = [];
+      state.myUrgentResponses = [];
+      state.myUrgentCallId = null;
+
+      clearRealtimeChannels();
+      refreshAuthUI();
+      updateDashboardUI();
+      navigate("home");
+      showAlert("Você saiu da conta.", "success");
+    } catch (error) {
+      showAlert(error.message || "Erro ao sair da conta.", "error");
     }
-
-    state.currentUser = null;
-    state.currentProviderProfile = null;
-    refreshAuthUI();
-    navigate("home");
-    showAlert("Você saiu da conta.", "success");
   });
 }
 
@@ -857,22 +979,30 @@ function bindLogin() {
     }
 
     state.currentUser = data.user || null;
-      await loadMyProvider();
-      refreshAuthUI();
 
-      if (isAdminUser()) {
-        navigate("admin");
-        showAlert("Login administrativo realizado com sucesso.", "success");
-        return;
-      }
+    try {
+      await ensureProviderProfileForCurrentUser();
+    } catch (profileError) {
+      console.error(profileError);
+      showAlert(profileError.message || "Erro ao finalizar o perfil de prestador.", "error");
+    }
 
-      navigate("dashboard");
+    await loadMyProvider();
+    refreshAuthUI();
 
-      if (state.currentProviderProfile) {
-        showAlert("Login realizado com sucesso.", "success");
-      } else {
-        showAlert("Login realizado, mas seu perfil de prestador ainda não foi encontrado.", "info");
-      }
+    if (isAdminUser()) {
+      navigate("admin");
+      showAlert("Login administrativo realizado com sucesso.", "success");
+      return;
+    }
+
+    navigate("dashboard");
+
+    if (state.currentProviderProfile) {
+      showAlert("Login realizado com sucesso.", "success");
+    } else {
+      showAlert("Login realizado, mas seu perfil de prestador ainda não foi encontrado.", "info");
+    }
   });
 
   $("btnForgotPassword")?.addEventListener("click", async () => {
@@ -998,20 +1128,7 @@ function bindRegister() {
       return;
     }
 
-    try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: payload.email,
-        password: payload.password
-      });
-
-      if (authError) throw authError;
-
-      const user = authData.user;
-
-      if (!user) {
-        throw new Error("Não foi possível criar o usuário.");
-      }
-
+        try {
       const { count, error: countError } = await supabase
         .from("prestadores")
         .select("*", { count: "exact", head: true });
@@ -1023,64 +1140,74 @@ function bindRegister() {
           ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
           : null;
 
-      const { error: insertError } = await supabase
-        .from("prestadores")
-        .insert({
-          user_id: user.id,
-          email: payload.email,
-          nome: payload.nome,
-          descricao: payload.descricao,
-          servico: payload.servico,
-          servicos: payload.servicos,
-          experiencia_anos: payload.experiencia_anos,
-          preco_medio: payload.preco_medio,
-          whatsapp: payload.whatsapp,
-          atende_emergencia: payload.atende_emergencia,
-          raio_km: payload.raio_km,
-          latitude: payload.latitude,
-          longitude: payload.longitude,
-          location: `POINT(${payload.longitude} ${payload.latitude})`,
-          assinatura_ate: assinaturaAte,
-          boost_ativo: false,
-          avaliacao_media: 0,
-          visualizacoes: 0,
-          cliques_whatsapp: 0
-        });
+      const pendingProfile = {
+        email: payload.email,
+        nome: payload.nome,
+        descricao: payload.descricao,
+        servico: payload.servico,
+        servicos: payload.servicos,
+        experiencia_anos: payload.experiencia_anos,
+        preco_medio: payload.preco_medio,
+        whatsapp: payload.whatsapp,
+        atende_emergencia: payload.atende_emergencia,
+        raio_km: payload.raio_km,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        assinatura_ate: assinaturaAte,
+        boost_ativo: false,
+        avaliacao_media: 0,
+        visualizacoes: 0,
+        cliques_whatsapp: 0,
+        created_at_client: new Date().toISOString()
+      };
 
-      if (insertError) throw insertError;
+      savePendingProviderProfile(pendingProfile);
 
-      const { data: createdProfile, error: createdProfileError } = await supabase
-        .from("prestadores")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: payload.email,
+        password: payload.password,
+        options: {
+          emailRedirectTo: window.location.origin
+        }
+      });
 
-      if (createdProfileError) throw createdProfileError;
+      if (authError) throw authError;
 
-      if (!createdProfile) {
-        throw new Error("Sua conta foi criada, mas o perfil de prestador não foi encontrado.");
-      }
+      const user = authData.user || null;
+      const session = authData.session || null;
 
       state.currentUser = user;
+      refreshAuthUI();
+
+      if (session?.user?.id) {
+        await ensureProviderProfileForCurrentUser();
+        await loadMyProvider(true);
+      } else {
+        state.currentProviderProfile = null;
+      }
 
       $("formRegister").reset();
       state.providerRegisterLocation = null;
       $("providerLocationText").textContent = "não definida";
 
       await fetchProviders();
-      await loadMyProvider();
-      refreshAuthUI();
-      navigate("dashboard");
+      updateDashboardUI();
 
-      showAlert(
-        "Cadastro iniciado com sucesso. Confira seu e-mail e confirme sua conta, se necessário.",
-        "success"
-      );
+      if (state.currentProviderProfile) {
+        navigate("dashboard");
+        showAlert("Cadastro concluído com sucesso.", "success");
+      } else {
+        navigate("login");
+        showAlert(
+          "Conta criada. Agora confirme seu e-mail e depois faça login para finalizar a criação do perfil de prestador.",
+          "success"
+        );
+      }
     } catch (error) {
       console.error(error);
       showAlert(
         error.message ||
-          "Erro ao cadastrar prestador. Se a conta foi criada mas o perfil não apareceu, revise o RLS da tabela prestadores.",
+          "Erro ao cadastrar prestador. Revise o RLS da tabela prestadores e tente novamente.",
         "error"
       );
     }
@@ -1498,14 +1625,21 @@ async function loadMyProvider(silent = false) {
   state.currentUser = session?.user || null;
 
   if (!state.currentUser) {
-  state.currentProviderProfile = null;
-  state.isEditingProfile = false;
-  state.profileDraftBackup = null;
-  refreshAuthUI();
-  updateMissingProfileNotice();
-  if (!silent) updateDashboardUI();
-  return;
-}
+    state.currentProviderProfile = null;
+    state.isEditingProfile = false;
+    state.profileDraftBackup = null;
+    refreshAuthUI();
+    updateMissingProfileNotice();
+    if (!silent) updateDashboardUI();
+    return;
+  }
+
+  try {
+    await ensureProviderProfileForCurrentUser();
+  } catch (profileError) {
+    console.error(profileError);
+    if (!silent) showAlert(profileError.message || "Erro ao finalizar seu perfil.", "error");
+  }
 
   const { data, error } = await supabase
     .from("prestadores")
@@ -1519,7 +1653,7 @@ async function loadMyProvider(silent = false) {
     return;
   }
 
- state.currentProviderProfile = data || null;
+  state.currentProviderProfile = data || null;
   state.isEditingProfile = false;
   state.profileDraftBackup = null;
   refreshAuthUI();
@@ -2094,6 +2228,11 @@ async function restoreSession() {
       initRealtime();
     } else {
       state.currentProviderProfile = null;
+      state.isEditingProfile = false;
+      state.profileDraftBackup = null;
+      state.providerUrgentCalls = [];
+      state.myUrgentResponses = [];
+      state.myUrgentCallId = null;
       updateDashboardUI();
       clearRealtimeChannels();
     }
