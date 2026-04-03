@@ -61,9 +61,11 @@
         <h3>Buscar prestadores</h3>
 
         <div class="grid-3">
-          <div class="field">
+          <div class="field autocomplete-field">
             <label for="searchService">Serviço</label>
-            <input id="searchService" type="text" placeholder="Ex: eletricista" />
+            <input id="searchService" type="text" placeholder="Ex: eletricista" autocomplete="off" />
+            <div id="searchServiceSuggestions" class="autocomplete-box hidden"></div>
+            <small id="searchServiceHint" class="small-muted hidden"></small>
           </div>
 
           <div class="field">
@@ -118,15 +120,7 @@
             <label for="loginPassword">Senha</label>
             <div class="password-wrap">
               <input id="loginPassword" type="password" placeholder="Sua senha" required />
-              <button type="button" class="password-toggle" data-toggle-password="loginPassword">👁</button>
-            </div>
-          </div>
-
-          <div class="field">
-            <label for="loginPasswordConfirm">Confirme sua senha</label>
-            <div class="password-wrap">
-              <input id="loginPasswordConfirm" type="password" placeholder="Digite a senha novamente" required />
-              <button type="button" class="password-toggle" data-toggle-password="loginPasswordConfirm">👁</button>
+              <button type="button" class="password-toggle" data-toggle-password="loginPassword">Mostrar</button>
             </div>
           </div>
 
@@ -165,7 +159,7 @@
               <label for="registerPassword">Senha</label>
               <div class="password-wrap">
                 <input id="registerPassword" type="password" placeholder="Crie uma senha" required />
-                <button type="button" class="password-toggle" data-toggle-password="registerPassword">👁</button>
+                <button type="button" class="password-toggle" data-toggle-password="registerPassword">Mostrar</button>
               </div>
             </div>
 
@@ -173,7 +167,7 @@
               <label for="registerPasswordConfirm">Confirme sua senha</label>
               <div class="password-wrap">
                 <input id="registerPasswordConfirm" type="password" placeholder="Digite a senha novamente" required />
-                <button type="button" class="password-toggle" data-toggle-password="registerPasswordConfirm">👁</button>
+                <button type="button" class="password-toggle" data-toggle-password="registerPasswordConfirm">Mostrar</button>
               </div>
             </div>
 
@@ -182,44 +176,14 @@
               <input id="registerWhatsapp" type="text" placeholder="11999999999" required />
             </div>
 
-            <div class="field">
+            <div class="field autocomplete-field">
               <label for="registerService">Serviço principal</label>
-              <input id="registerService" list="servicesList" type="text" placeholder="Ex: eletricista" required />
-              <datalist id="servicesList">
-                <option value="Eletricista"></option>
-                <option value="Encanador"></option>
-                <option value="Pedreiro"></option>
-                <option value="Pintor"></option>
-                <option value="Diarista"></option>
-                <option value="Faxineira"></option>
-                <option value="Montador de móveis"></option>
-                <option value="Marceneiro"></option>
-                <option value="Chaveiro"></option>
-                <option value="Jardineiro"></option>
-                <option value="Vidraceiro"></option>
-                <option value="Técnico de informática"></option>
-                <option value="Instalador de ar-condicionado"></option>
-                <option value="Mecânico"></option>
-                <option value="Borracheiro"></option>
-                <option value="Motorista"></option>
-                <option value="Entregador"></option>
-                <option value="Passeador de cães"></option>
-                <option value="Personal trainer"></option>
-                <option value="Babá"></option>
-                <option value="Cuidador de idosos"></option>
-                <option value="Freteiro"></option>
-                <option value="Serralheiro"></option>
-                <option value="Soldador"></option>
-                <option value="Gesseiro"></option>
-                <option value="Azulejista"></option>
-                <option value="Técnico em celular"></option>
-                <option value="Fotógrafo"></option>
-                <option value="Professor particular"></option>
-                <option value="Manicure"></option>
-                <option value="Cabeleireiro"></option>
-                <option value="Maquiador"></option>
-              </datalist>
+              <input id="registerService" type="text" placeholder="Ex: eletricista, encanador, pintor" autocomplete="off" required />
+              <div id="registerServiceSuggestions" class="autocomplete-box hidden"></div>
+              <small id="registerServiceHint" class="small-muted hidden"></small>
             </div>
+
+            
 
             <div class="field">
               <label for="registerExperience">Anos de experiência</label>
@@ -265,6 +229,12 @@
             <span id="providerLocationText">não definida</span>
           </div>
 
+          <div class="card info-card">
+            <p class="small-muted">
+              Após concluir o cadastro, confirme sua conta no link enviado para o seu e-mail.
+            </p>
+          </div>
+
           <label class="check">
             <input type="checkbox" required />
             <span>
@@ -307,6 +277,10 @@
         </div>
       </div>
 
+      <div id="providerMissingProfileNotice" class="alert alert-error hidden">
+        Sua conta foi autenticada, mas seu perfil de prestador ainda não foi encontrado.
+      </div>
+
       <div class="stats-grid">
         <div class="card">
           <h3>Plano e destaque</h3>
@@ -342,62 +316,46 @@
       </div>
 
       <div class="card">
-        <h3>Meu perfil</h3>
+        <div class="dashboard-section-header">
+          <div>
+            <h3>Meu perfil</h3>
+            <p class="small-muted">Seus dados atuais de prestador.</p>
+          </div>
+          <button type="button" id="btnToggleEditProfile" class="btn btn-secondary">Alterar perfil</button>
+        </div>
 
         <form id="formProfile">
-          <div class="card">
-            <h3>Alterar senha</h3>
-
-            <form id="formChangePassword">
-              <div class="field">
-                <label for="newPassword">Nova senha</label>
-                <div class="password-wrap">
-                  <input id="newPassword" type="password" placeholder="Nova senha" required />
-                  <button type="button" class="password-toggle" data-toggle-password="newPassword">👁</button>
-                </div>
-              </div>
-
-              <div class="field">
-                <label for="confirmNewPassword">Confirme a nova senha</label>
-                <div class="password-wrap">
-                  <input id="confirmNewPassword" type="password" placeholder="Digite novamente" required />
-                  <button type="button" class="password-toggle" data-toggle-password="confirmNewPassword">👁</button>
-                </div>
-              </div>
-
-              <button type="submit" class="btn w-full">Atualizar senha</button>
-            </form>
-          </div>
-
           <div class="grid-2">
             <div class="field">
               <label for="profileName">Nome</label>
-              <input id="profileName" type="text" />
+              <input id="profileName" type="text" disabled />
             </div>
 
             <div class="field">
               <label for="profileWhatsapp">WhatsApp</label>
-              <input id="profileWhatsapp" type="text" />
+              <input id="profileWhatsapp" type="text" disabled />
             </div>
 
-            <div class="field">
+            <div class="field autocomplete-field">
               <label for="profileService">Serviço principal</label>
-              <input id="profileService" type="text" />
+              <input id="profileService" type="text" autocomplete="off" disabled />
+              <div id="profileServiceSuggestions" class="autocomplete-box hidden"></div>
+              <small id="profileServiceHint" class="small-muted hidden"></small>
             </div>
 
             <div class="field">
               <label for="profileExperience">Anos de experiência</label>
-              <input id="profileExperience" type="number" min="0" />
+              <input id="profileExperience" type="number" min="0" disabled />
             </div>
 
             <div class="field">
               <label for="profilePrice">Preço médio</label>
-              <input id="profilePrice" type="number" min="0" step="0.01" />
+              <input id="profilePrice" type="number" min="0" step="0.01" disabled />
             </div>
 
             <div class="field">
               <label for="profileRadius">Raio de atendimento</label>
-              <select id="profileRadius">
+              <select id="profileRadius" disabled>
                 <option value="5">5 km</option>
                 <option value="10">10 km</option>
                 <option value="20">20 km</option>
@@ -408,17 +366,17 @@
 
           <div class="field">
             <label for="profileDescription">Descrição</label>
-            <textarea id="profileDescription" rows="4"></textarea>
+            <textarea id="profileDescription" rows="4" disabled></textarea>
           </div>
 
           <div class="grid-2">
             <label class="check">
-              <input id="profileEmergency" type="checkbox" />
+              <input id="profileEmergency" type="checkbox" disabled />
               <span>Atendo emergência</span>
             </label>
 
             <div class="actions-end">
-              <button type="button" id="btnProfileLocation" class="btn btn-secondary">
+              <button type="button" id="btnProfileLocation" class="btn btn-secondary" disabled>
                 Atualizar localização
               </button>
             </div>
@@ -429,7 +387,34 @@
             <span id="profileLocationText">não definida</span>
           </div>
 
-          <button type="submit" class="btn w-full">Salvar perfil</button>
+          <div class="actions">
+            <button type="submit" id="btnSaveProfile" class="btn hidden">Salvar perfil</button>
+            <button type="button" id="btnCancelEditProfile" class="btn btn-secondary hidden">Cancelar</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Alterar senha</h3>
+
+        <form id="formChangePassword">
+          <div class="field">
+            <label for="newPassword">Nova senha</label>
+            <div class="password-wrap">
+              <input id="newPassword" type="password" placeholder="Nova senha" required />
+              <button type="button" class="password-toggle" data-toggle-password="newPassword">Mostrar</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="confirmNewPassword">Confirme a nova senha</label>
+            <div class="password-wrap">
+              <input id="confirmNewPassword" type="password" placeholder="Digite novamente" required />
+              <button type="button" class="password-toggle" data-toggle-password="confirmNewPassword">Mostrar</button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn w-full">Atualizar senha</button>
         </form>
       </div>
 
@@ -457,11 +442,13 @@
           Envie um chamado para prestadores próximos e aumente suas chances de resolver o problema rápido.
         </p>
 
-        <form id="formUrgent">
+         <form id="formUrgent">
           <div class="grid-2">
-            <div class="field">
+            <div class="field autocomplete-field">
               <label for="urgentService">Serviço necessário</label>
-              <input id="urgentService" type="text" placeholder="Ex: encanador" required />
+              <input id="urgentService" type="text" placeholder="Ex: encanador" autocomplete="off" required />
+              <div id="urgentServiceSuggestions" class="autocomplete-box hidden"></div>
+              <small id="urgentServiceHint" class="small-muted hidden"></small>
             </div>
 
             <div class="field">
@@ -650,8 +637,7 @@
     <p>
       Para dúvidas jurídicas, notificações, denúncias, direitos de titular de dados
       e solicitações relacionadas à plataforma, utilize:
-      <strong>juridico@seufaztudo.com.br</strong> e
-      <strong>privacidade@seufaztudo.com.br</strong>.
+      <strong>contato.seufaztudo@gmail.com</strong>
     </p>
 
     <h3>15. Lei aplicável e foro</h3>
@@ -682,7 +668,7 @@
       Controlador dos dados pessoais tratados no contexto da plataforma:
       <strong>[PREENCHER NOME / RAZÃO SOCIAL]</strong>,
       <strong>[PREENCHER CPF OU CNPJ]</strong>,
-      e-mail de contato: <strong>privacidade@seufaztudo.com.br</strong>.
+      e-mail de contato: <strong>contato.seufaztudo@gmail.com</strong>.
     </p>
 
     <h3>3. Dados que podemos coletar</h3>
@@ -776,7 +762,7 @@
     <h3>11. Canal para privacidade</h3>
     <p>
       Solicitações relacionadas a dados pessoais podem ser encaminhadas para
-      <strong>privacidade@seufaztudo.com.br</strong>.
+      <strong>contato.seufaztudo@gmail.com</strong>.
     </p>
 
     <h3>12. Cookies e tecnologias semelhantes</h3>
@@ -952,7 +938,7 @@
       </div>
 
       <p class="small-muted">
-        Contato jurídico: juridico@seufaztudo.com.br • Privacidade: privacidade@seufaztudo.com.br
+        Contato jurídico e Privacidade: contato.seufaztudo@gmail.com
       </p>
     </footer>
 

@@ -3,6 +3,9 @@ const state = {
   currentUser: null,
   currentProviderProfile: null,
 
+  isEditingProfile: false,
+  profileDraftBackup: null,
+
   userLocation: null,
   providerRegisterLocation: null,
   urgentLocation: null,
@@ -19,7 +22,8 @@ const routes = ["home", "login", "register", "dashboard", "urgent", "terms", "pr
 
 const ADMIN_EMAILS = [
   "contato@seufaztudo.com.br",
-  "gabrieldacosta717@gmail.com"
+  "gabrieldacosta717@gmail.com",
+  "contato.seufaztudo@gmail.com"
 ];
 
 const SERVICE_ALIASES = {
@@ -69,6 +73,40 @@ const SERVICE_ALIASES = {
   "maquiador": "Maquiador"
 };
 
+const SERVICE_OPTIONS = [
+  "Eletricista",
+  "Encanador",
+  "Pedreiro",
+  "Pintor",
+  "Diarista",
+  "Montador de móveis",
+  "Marceneiro",
+  "Chaveiro",
+  "Jardineiro",
+  "Vidraceiro",
+  "Técnico de informática",
+  "Instalador de ar-condicionado",
+  "Mecânico",
+  "Borracheiro",
+  "Motorista",
+  "Entregador",
+  "Passeador de cães",
+  "Personal trainer",
+  "Babá",
+  "Cuidador de idosos",
+  "Freteiro",
+  "Serralheiro",
+  "Soldador",
+  "Gesseiro",
+  "Azulejista",
+  "Técnico em celular",
+  "Fotógrafo",
+  "Professor particular",
+  "Manicure",
+  "Cabeleireiro",
+  "Maquiador"
+];
+
 function normalizeText(value) {
   return String(value || "")
     .normalize("NFD")
@@ -77,9 +115,146 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function normalizeWhatsappBR(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+
+  if (!digits) return "";
+
+  
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+  }
+
+  
+  if (!digits.startsWith("55")) {
+    digits = "55" + digits;
+  }
+
+ 
+  if (digits.length < 12 || digits.length > 13) {
+    return "";
+  }
+
+  return digits;
+}
+
 function normalizeService(value) {
   const normalized = normalizeText(value);
   return SERVICE_ALIASES[normalized] || safeTrim(value, 120);
+}
+
+function normalizeServicesInput(value) {
+  return String(value || "")
+    .split(",")
+    .map(s => normalizeService(s))
+    .filter(Boolean)
+    .filter((service, index, arr) => arr.indexOf(service) === index);
+}
+
+function getProviderServices(provider) {
+  if (Array.isArray(provider?.servicos) && provider.servicos.length) {
+    return provider.servicos.filter(Boolean);
+  }
+
+  if (provider?.servico) {
+    return [provider.servico];
+  }
+
+  return [];
+}
+
+function providerMatchesService(provider, serviceQuery) {
+  if (!serviceQuery) return true;
+
+  const normalizedQuery = normalizeText(serviceQuery);
+  const services = getProviderServices(provider);
+
+  return services.some(service =>
+    normalizeText(service).includes(normalizedQuery)
+  );
+}
+
+function getServiceMatches(query) {
+  const term = normalizeText(query);
+
+  if (!term) return [];
+
+  return SERVICE_OPTIONS.filter(service => {
+    const normalized = normalizeText(service);
+    return normalized.includes(term);
+  }).slice(0, 8);
+}
+
+function renderServiceSuggestions(inputId, boxId, hintId) {
+  const input = $(inputId);
+  const box = $(boxId);
+  const hint = $(hintId);
+
+  if (!input || !box || !hint) return;
+
+  const value = input.value.trim();
+  const matches = getServiceMatches(value);
+
+  if (!value) {
+    box.innerHTML = "";
+    box.classList.add("hidden");
+    hint.textContent = "";
+    hint.classList.add("hidden");
+    return;
+  }
+
+  if (!matches.length) {
+    box.innerHTML = `<div class="autocomplete-item-empty">Nenhum serviço encontrado</div>`;
+    box.classList.remove("hidden");
+    hint.textContent = "Você pode continuar digitando mesmo assim.";
+    hint.classList.remove("hidden");
+    return;
+  }
+
+  hint.textContent = "";
+  hint.classList.add("hidden");
+
+  box.innerHTML = matches
+    .map(service => `<button type="button" class="autocomplete-item" data-service-value="${escapeHtml(service)}">${escapeHtml(service)}</button>`)
+    .join("");
+
+  box.classList.remove("hidden");
+
+  box.querySelectorAll("[data-service-value]").forEach(button => {
+    button.addEventListener("click", () => {
+      input.value = button.getAttribute("data-service-value") || "";
+      box.innerHTML = "";
+      box.classList.add("hidden");
+      hint.textContent = "";
+      hint.classList.add("hidden");
+    });
+  });
+}
+
+function setupServiceAutocomplete(inputId, boxId, hintId) {
+  const input = $(inputId);
+  const box = $(boxId);
+  const hint = $(hintId);
+
+  if (!input || !box || !hint) return;
+
+  input.addEventListener("input", () => {
+    renderServiceSuggestions(inputId, boxId, hintId);
+  });
+
+  input.addEventListener("focus", () => {
+    renderServiceSuggestions(inputId, boxId, hintId);
+  });
+
+  document.addEventListener("click", event => {
+    const clickedInside =
+      event.target === input ||
+      box.contains(event.target);
+
+    if (!clickedInside) {
+      box.classList.add("hidden");
+    }
+  });
 }
 
 function setupPasswordToggles() {
@@ -196,11 +371,13 @@ function renderAdminProviders(providers) {
     const article = document.createElement("article");
     article.className = "provider-card";
 
+    const servicesText = getProviderServices(provider).join(", ") || "Sem serviço";
+
     article.innerHTML = `
       <div class="provider-top">
         <div>
           <h4 class="provider-name">${escapeHtml(provider.nome || "Sem nome")}</h4>
-          <p class="provider-service">${escapeHtml(provider.servico || "Sem serviço")}</p>
+          <p class="provider-service">${escapeHtml(servicesText)}</p>
         </div>
         <div class="provider-badges">
           ${provider.bloqueado ? `<span class="badge badge-emergency">Bloqueado</span>` : `<span class="badge badge-boost">Ativo</span>`}
@@ -215,10 +392,46 @@ function renderAdminProviders(providers) {
         <span class="meta-pill">${Number(provider.cliques_whatsapp || 0)} cliques</span>
       </div>
 
+      <div class="actions">
+        <button class="btn btn-secondary btn-toggle-block" data-id="${provider.id}" data-blocked="${provider.bloqueado}">
+          ${provider.bloqueado ? "Desbloquear" : "Bloquear"}
+        </button>
+      </div>
+
       <p class="provider-description">${escapeHtml(provider.descricao || "Sem descrição.")}</p>
     `;
 
     container.appendChild(article);
+  });
+
+  bindAdminActions();
+}
+
+function bindAdminActions() {
+  document.querySelectorAll(".btn-toggle-block").forEach(button => {
+    button.addEventListener("click", async () => {
+      const id = button.getAttribute("data-id");
+      const isBlocked = button.getAttribute("data-blocked") === "true";
+
+      try {
+        const { error } = await supabase
+          .from("prestadores")
+          .update({ bloqueado: !isBlocked })
+          .eq("id", id);
+
+        if (error) throw error;
+
+        showAlert(
+          isBlocked ? "Prestador desbloqueado." : "Prestador bloqueado.",
+          "success"
+        );
+
+        await loadAdminProviders();
+
+      } catch (error) {
+        showAlert(error.message || "Erro ao atualizar prestador.", "error");
+      }
+    });
   });
 }
 
@@ -264,8 +477,11 @@ function createMetaPill(text) {
 }
 
 function toWhatsappLink(phone, message) {
-  const cleanPhone = String(phone || "").replace(/\D/g, "");
-  return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message || "")}`;
+  const normalized = normalizeWhatsappBR(phone);
+
+  if (!normalized) return null;
+
+  return `https://wa.me/${normalized}?text=${encodeURIComponent(message || "")}`;
 }
 
 function deg2rad(deg) {
@@ -347,6 +563,7 @@ async function fetchProviders() {
   const { data, error } = await supabase
     .from("prestadores")
     .select("*")
+    .eq("bloqueado", false)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -378,10 +595,13 @@ function renderProviders(list) {
   }
 
   list.forEach(provider => {
+    if (provider.bloqueado) return;
+
     const fragment = template.content.cloneNode(true);
+    const servicesText = getProviderServices(provider).join(", ") || "Serviço não informado";
 
     fragment.querySelector(".provider-name").textContent = provider.nome || "Prestador";
-    fragment.querySelector(".provider-service").textContent = provider.servico || "Serviço não informado";
+    fragment.querySelector(".provider-service").textContent = servicesText;
     fragment.querySelector(".provider-description").textContent =
       provider.descricao || "Sem descrição cadastrada.";
 
@@ -414,7 +634,7 @@ function renderProviders(list) {
     const viewProfileBtn = fragment.querySelector(".btn-view-profile");
     viewProfileBtn.addEventListener("click", async () => {
       showAlert(
-        `${provider.nome || "Prestador"} • ${provider.servico || "Serviço"} • ${formatCurrency(
+        `${provider.nome || "Prestador"} • ${servicesText} • ${formatCurrency(
           provider.preco_medio
         )} • ⭐ ${Number(provider.avaliacao_media || 0).toFixed(1)}`,
         "info"
@@ -532,7 +752,7 @@ function bindHome() {
 }
 
 async function handleSearchProviders() {
-  const service = $("searchService").value.trim();
+  const service = normalizeService($("searchService").value.trim());
   const radiusKm = Number($("searchRadius").value || 10);
 
   if (!state.userLocation) {
@@ -548,35 +768,43 @@ async function handleSearchProviders() {
   try {
     let results = null;
 
-    const rpcResponse = await supabase.rpc("buscar_prestadores", {
-      user_lat: state.userLocation.latitude,
-      user_lng: state.userLocation.longitude,
-      raio_metros: radiusKm * 1000,
-      servico_busca: service || null
-    });
+    if (typeof supabase.rpc === "function") {
+      const rpcResponse = await supabase.rpc("buscar_prestadores", {
+        user_lat: state.userLocation.latitude,
+        user_lng: state.userLocation.longitude,
+        raio_metros: radiusKm * 1000,
+        servico_busca: service || null
+      });
 
-    if (!rpcResponse.error && Array.isArray(rpcResponse.data)) {
-      results = rpcResponse.data.map(provider => ({
-        ...provider,
-        distanceKm:
-          typeof provider.distancia === "number"
-            ? provider.distancia / 1000
-            : null
-      }));
+      if (!rpcResponse.error && Array.isArray(rpcResponse.data)) {
+        results = rpcResponse.data
+          .map(provider => ({
+            ...provider,
+            distanceKm:
+              typeof provider.distancia === "number"
+                ? provider.distancia / 1000
+                : calculateDistanceKm(
+                    state.userLocation.latitude,
+                    state.userLocation.longitude,
+                    Number(provider.latitude),
+                    Number(provider.longitude)
+                  )
+          }))
+          .filter(provider => providerMatchesService(provider, service));
+      }
     }
 
     if (!results) {
-      const { data, error } = await supabase.from("prestadores").select("*");
+      const { data, error } = await supabase
+        .from("prestadores")
+        .select("*")
+        .eq("bloqueado", false);
 
       if (error) throw error;
 
       results = (data || [])
         .filter(provider => {
-          const matchesService = !service
-            ? true
-            : String(provider.servico || "")
-                .toLowerCase()
-                .includes(service.toLowerCase());
+          const matchesService = providerMatchesService(provider, service);
 
           const distanceKm = calculateDistanceKm(
             state.userLocation.latitude,
@@ -616,12 +844,7 @@ function bindLogin() {
 
     const email = $("loginEmail").value.trim();
     const password = $("loginPassword").value;
-    const passwordConfirm = $("loginPasswordConfirm").value;
-
-     if (password !== passwordConfirm) {
-      showAlert("As duas senhas do login precisam ser iguais.", "error");
-      return;
-    }
+   
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -634,10 +857,22 @@ function bindLogin() {
     }
 
     state.currentUser = data.user || null;
-    await loadMyProvider();
-    refreshAuthUI();
-    navigate(isAdminUser() ? "admin" : "dashboard");
-    showAlert("Login realizado com sucesso.", "success");
+      await loadMyProvider();
+      refreshAuthUI();
+
+      if (isAdminUser()) {
+        navigate("admin");
+        showAlert("Login administrativo realizado com sucesso.", "success");
+        return;
+      }
+
+      navigate("dashboard");
+
+      if (state.currentProviderProfile) {
+        showAlert("Login realizado com sucesso.", "success");
+      } else {
+        showAlert("Login realizado, mas seu perfil de prestador ainda não foi encontrado.", "info");
+      }
   });
 
   $("btnForgotPassword")?.addEventListener("click", async () => {
@@ -705,15 +940,16 @@ function bindRegister() {
       return;
     }
 
-    const rawService = $("registerService").value;
+    const rawServices = normalizeServicesInput($("registerService").value);
 
     const payload = {
       nome: safeTrim($("registerName").value, 120),
       email: safeTrim($("registerEmail").value, 160),
       password: $("registerPassword").value,
       passwordConfirm: $("registerPasswordConfirm").value,
-      whatsapp: safeTrim($("registerWhatsapp").value, 20),
-      servico: normalizeService(rawService),
+      whatsapp: normalizeWhatsappBR($("registerWhatsapp").value),
+      servicos: rawServices,
+      servico: rawServices[0] || "",
       experiencia_anos: toPositiveNumber($("registerExperience").value),
       preco_medio: toPositiveNumber($("registerPrice").value),
       raio_km: toPositiveNumber($("registerRadius").value),
@@ -743,17 +979,21 @@ function bindRegister() {
       return;
     }
 
-    if (!isValidPhone(payload.whatsapp)) {
-      showAlert("WhatsApp inválido. Use DDD + número.", "error");
+    if (!payload.whatsapp) {
+      showAlert("Digite um WhatsApp válido com DDD.", "error");
       return;
     }
 
-    if (!payload.servico) {
-      showAlert("Informe o serviço principal.", "error");
+    if (!payload.servicos.length) {
+      showAlert("Informe pelo menos um serviço.", "error");
       return;
     }
 
-    if (payload.experiencia_anos === null || payload.preco_medio === null || payload.raio_km === null) {
+    if (
+      payload.experiencia_anos === null ||
+      payload.preco_medio === null ||
+      payload.raio_km === null
+    ) {
       showAlert("Preencha corretamente experiência, preço e raio.", "error");
       return;
     }
@@ -764,9 +1004,7 @@ function bindRegister() {
         password: payload.password
       });
 
-      if (authError) {
-        throw authError;
-      }
+      if (authError) throw authError;
 
       const user = authData.user;
 
@@ -778,9 +1016,7 @@ function bindRegister() {
         .from("prestadores")
         .select("*", { count: "exact", head: true });
 
-      if (countError) {
-        throw countError;
-      }
+      if (countError) throw countError;
 
       const assinaturaAte =
         Number(count || 0) < 500
@@ -791,9 +1027,11 @@ function bindRegister() {
         .from("prestadores")
         .insert({
           user_id: user.id,
+          email: payload.email,
           nome: payload.nome,
           descricao: payload.descricao,
           servico: payload.servico,
+          servicos: payload.servicos,
           experiencia_anos: payload.experiencia_anos,
           preco_medio: payload.preco_medio,
           whatsapp: payload.whatsapp,
@@ -809,8 +1047,18 @@ function bindRegister() {
           cliques_whatsapp: 0
         });
 
-      if (insertError) {
-        throw insertError;
+      if (insertError) throw insertError;
+
+      const { data: createdProfile, error: createdProfileError } = await supabase
+        .from("prestadores")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (createdProfileError) throw createdProfileError;
+
+      if (!createdProfile) {
+        throw new Error("Sua conta foi criada, mas o perfil de prestador não foi encontrado.");
       }
 
       state.currentUser = user;
@@ -824,15 +1072,91 @@ function bindRegister() {
       refreshAuthUI();
       navigate("dashboard");
 
-      showAlert("Cadastro realizado com sucesso.", "success");
+      showAlert(
+        "Cadastro iniciado com sucesso. Confira seu e-mail e confirme sua conta, se necessário.",
+        "success"
+      );
     } catch (error) {
       console.error(error);
-      showAlert(error.message || "Erro ao cadastrar prestador.", "error");
+      showAlert(
+        error.message ||
+          "Erro ao cadastrar prestador. Se a conta foi criada mas o perfil não apareceu, revise o RLS da tabela prestadores.",
+        "error"
+      );
     }
   });
 }
 
+function setProfileEditMode(isEditing) {
+  state.isEditingProfile = isEditing;
+
+  const ids = [
+    "profileName",
+    "profileWhatsapp",
+    "profileService",
+    "profileExperience",
+    "profilePrice",
+    "profileRadius",
+    "profileDescription"
+  ];
+
+  ids.forEach(id => {
+    const el = $(id);
+    if (el) {
+      el.disabled = !isEditing;
+    }
+  });
+
+  if ($("profileEmergency")) {
+    $("profileEmergency").disabled = !isEditing;
+  }
+
+  if ($("btnProfileLocation")) {
+    $("btnProfileLocation").disabled = !isEditing;
+  }
+
+  $("btnSaveProfile")?.classList.toggle("hidden", !isEditing);
+  $("btnCancelEditProfile")?.classList.toggle("hidden", !isEditing);
+  $("btnToggleEditProfile")?.classList.toggle("hidden", isEditing);
+}
+
 function bindDashboard() {
+  $("btnToggleEditProfile")?.addEventListener("click", () => {
+    if (!state.currentProviderProfile) {
+      showAlert("Seu perfil de prestador ainda não foi encontrado.", "error");
+      return;
+    }
+
+    state.profileDraftBackup = {
+      nome: $("profileName").value,
+      whatsapp: normalizeWhatsappBR($("profileWhatsapp").value),
+      servico: $("profileService").value,
+      experiencia_anos: $("profileExperience").value,
+      preco_medio: $("profilePrice").value,
+      raio_km: $("profileRadius").value,
+      descricao: $("profileDescription").value,
+      atende_emergencia: $("profileEmergency").checked
+    };
+
+    setProfileEditMode(true);
+  });
+
+  $("btnCancelEditProfile")?.addEventListener("click", () => {
+    if (state.profileDraftBackup) {
+      $("profileName").value = state.profileDraftBackup.nome || "";
+      $("profileWhatsapp").value = state.profileDraftBackup.whatsapp || "";
+      $("profileService").value = state.profileDraftBackup.servico || "";
+      $("profileExperience").value = state.profileDraftBackup.experiencia_anos || "";
+      $("profilePrice").value = state.profileDraftBackup.preco_medio || "";
+      $("profileRadius").value = state.profileDraftBackup.raio_km || "10";
+      $("profileDescription").value = state.profileDraftBackup.descricao || "";
+      $("profileEmergency").checked = !!state.profileDraftBackup.atende_emergencia;
+    }
+
+    state.profileDraftBackup = null;
+    setProfileEditMode(false);
+  });
+
   $("btnProfileLocation")?.addEventListener("click", async () => {
     if (!state.currentProviderProfile) {
       showAlert("Faça login primeiro.", "error");
@@ -858,10 +1182,18 @@ function bindDashboard() {
       return;
     }
 
+    const rawServices = normalizeServicesInput($("profileService").value);
+
+    if (!rawServices.length) {
+      showAlert("Informe pelo menos um serviço.", "error");
+      return;
+    }
+
     const updated = {
       nome: $("profileName").value.trim(),
-      whatsapp: $("profileWhatsapp").value.trim(),
-      servico: normalizeService($("profileService").value),
+      whatsapp: normalizeWhatsappBR($("profileWhatsapp").value),
+      servicos: rawServices,
+      servico: rawServices[0],
       experiencia_anos: Number($("profileExperience").value || 0),
       preco_medio: Number($("profilePrice").value || 0),
       raio_km: Number($("profileRadius").value || 10),
@@ -873,6 +1205,11 @@ function bindDashboard() {
         state.currentProviderProfile.latitude
       )})`
     };
+
+    if (!updated.whatsapp) {
+      showAlert("Digite um WhatsApp válido com DDD.", "error");
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -896,7 +1233,9 @@ function bindDashboard() {
       }
 
       renderProviders(sortProviders(state.providers));
+      state.profileDraftBackup = null;
       updateDashboardUI();
+      setProfileEditMode(false);
       showAlert("Perfil salvo com sucesso.", "success");
     } catch (error) {
       console.error(error);
@@ -1110,9 +1449,7 @@ async function createUrgentCall() {
       }
 
       nearbyProviders = (providersData || []).filter(provider => {
-        const serviceMatch = String(provider.servico || "")
-          .toLowerCase()
-          .includes(servico.toLowerCase());
+        const serviceMatch = providerMatchesService(provider, servico);
 
         const distanceKm = calculateDistanceKm(
           state.urgentLocation.latitude,
@@ -1161,11 +1498,14 @@ async function loadMyProvider(silent = false) {
   state.currentUser = session?.user || null;
 
   if (!state.currentUser) {
-    state.currentProviderProfile = null;
-    refreshAuthUI();
-    if (!silent) updateDashboardUI();
-    return;
-  }
+  state.currentProviderProfile = null;
+  state.isEditingProfile = false;
+  state.profileDraftBackup = null;
+  refreshAuthUI();
+  updateMissingProfileNotice();
+  if (!silent) updateDashboardUI();
+  return;
+}
 
   const { data, error } = await supabase
     .from("prestadores")
@@ -1179,9 +1519,13 @@ async function loadMyProvider(silent = false) {
     return;
   }
 
-  state.currentProviderProfile = data || null;
+ state.currentProviderProfile = data || null;
+  state.isEditingProfile = false;
+  state.profileDraftBackup = null;
   refreshAuthUI();
+  updateMissingProfileNotice();
   updateDashboardUI();
+  setProfileEditMode(false);
 
   if (state.currentProviderProfile) {
     await loadProviderUrgentCalls();
@@ -1209,12 +1553,14 @@ function updateDashboardUI() {
     $("planMessage").textContent = "Faça login para ver o status do plano.";
     $("providerUrgentCallsList").innerHTML = "";
 
+    setProfileEditMode(false);
+    updateMissingProfileNotice();
     return;
-    }
+  }
 
   $("profileName").value = profile.nome || "";
   $("profileWhatsapp").value = profile.whatsapp || "";
-  $("profileService").value = profile.servico || "";
+  $("profileService").value = getProviderServices(profile).join(", ");
   $("profileExperience").value = Number(profile.experiencia_anos || 0);
   $("profilePrice").value = Number(profile.preco_medio || 0);
   $("profileRadius").value = String(profile.raio_km || 10);
@@ -1257,6 +1603,17 @@ function updateDashboardUI() {
   }
 
   $("planMessage").textContent = partes.join(" ");
+
+  updateMissingProfileNotice();
+
+  if (!state.isEditingProfile) {
+    setProfileEditMode(false);
+  }
+}
+
+function updateMissingProfileNotice() {
+  const shouldShow = !!state.currentUser && !state.currentProviderProfile;
+  $("providerMissingProfileNotice")?.classList.toggle("hidden", !shouldShow);
 }
 
 async function loadProviderUrgentCalls() {
@@ -1529,7 +1886,7 @@ function renderUrgentResponses(responses) {
       <div class="provider-top">
         <div>
           <h4 class="provider-name">${escapeHtml(prestador?.nome || "Prestador")}</h4>
-          <p class="provider-service">${escapeHtml(prestador?.servico || "Serviço")}</p>
+          <p class="provider-service">${escapeHtml(getProviderServices(prestador).join(", ") || "Serviço")}</p>
         </div>
         <div class="provider-badges">
           ${escolhido ? `<span class="badge badge-boost">Escolhido</span>` : ``}
@@ -1813,6 +2170,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   bindChangePassword();
   setupPasswordToggles();
+
+  setupServiceAutocomplete("searchService", "searchServiceSuggestions", "searchServiceHint");
+  setupServiceAutocomplete("registerService", "registerServiceSuggestions", "registerServiceHint");
+  setupServiceAutocomplete("profileService", "profileServiceSuggestions", "profileServiceHint");
+  setupServiceAutocomplete("urgentService", "urgentServiceSuggestions", "urgentServiceHint");
 
   await restoreSession();
   await fetchProviders();
