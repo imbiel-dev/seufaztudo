@@ -296,6 +296,52 @@ function clearPendingProviderProfile() {
   localStorage.removeItem(PENDING_PROVIDER_PROFILE_KEY);
 }
 
+async function savePendingProviderProfileInAuthMetadata(payload) {
+  if (!supabase || !payload) return;
+
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+
+  if (!session?.user) return;
+
+  const currentMetadata = session.user.user_metadata || {};
+
+  await supabase.auth.updateUser({
+    data: {
+      ...currentMetadata,
+      pending_provider_profile: payload
+    }
+  });
+}
+
+async function getPendingProviderProfileFromAuthMetadata() {
+  if (!supabase) return null;
+
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+
+  return session?.user?.user_metadata?.pending_provider_profile || null;
+}
+
+async function clearPendingProviderProfileFromAuthMetadata() {
+  if (!supabase) return;
+
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+
+  if (!session?.user) return;
+
+  const metadata = { ...(session.user.user_metadata || {}) };
+  delete metadata.pending_provider_profile;
+
+  await supabase.auth.updateUser({
+    data: metadata
+  });
+}
+
 function sanitizeProviderInsertPayload(payload, userId) {
   return {
     user_id: userId,
@@ -316,22 +362,13 @@ function sanitizeProviderInsertPayload(payload, userId) {
     boost_ativo: !!payload?.boost_ativo,
     avaliacao_media: Number(payload?.avaliacao_media || 0),
     visualizacoes: Number(payload?.visualizacoes || 0),
-    cliques_whatsapp: Number(payload?.cliques_whatsapp || 0)
+    cliques_whatsapp: Number(payload?.cliques_whatsapp || 0),
+    bloqueado: false
   };
 }
 
 async function ensureProviderProfileForCurrentUser() {
   if (!supabase || !state.currentUser) return null;
-
-  const pending = getPendingProviderProfile();
-  if (!pending) return null;
-
-  const pendingEmail = String(pending.email || "").toLowerCase();
-  const currentEmail = String(state.currentUser.email || "").toLowerCase();
-
-  if (!pendingEmail || pendingEmail !== currentEmail) {
-    return null;
-  }
 
   const { data: existingProfile, error: existingError } = await supabase
     .from("prestadores")
@@ -345,7 +382,25 @@ async function ensureProviderProfileForCurrentUser() {
 
   if (existingProfile) {
     clearPendingProviderProfile();
+    await clearPendingProviderProfileFromAuthMetadata();
     return existingProfile;
+  }
+
+  let pending = getPendingProviderProfile();
+
+  if (!pending) {
+    pending = await getPendingProviderProfileFromAuthMetadata();
+  }
+
+  if (!pending) {
+    return null;
+  }
+
+  const pendingEmail = String(pending.email || "").toLowerCase();
+  const currentEmail = String(state.currentUser.email || "").toLowerCase();
+
+  if (!pendingEmail || pendingEmail !== currentEmail) {
+    return null;
   }
 
   const insertPayload = sanitizeProviderInsertPayload(pending, state.currentUser.id);
@@ -370,6 +425,7 @@ async function ensureProviderProfileForCurrentUser() {
 
   if (createdProfile) {
     clearPendingProviderProfile();
+    await clearPendingProviderProfileFromAuthMetadata();
   }
 
   return createdProfile || null;
@@ -662,7 +718,6 @@ async function fetchProviders() {
   const { data, error } = await supabase
     .from("prestadores")
     .select("*")
-    .eq("bloqueado", false)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -671,7 +726,7 @@ async function fetchProviders() {
     return;
   }
 
-  state.providers = data || [];
+  state.providers = (data || []).filter(provider => !provider.bloqueado);
   renderProviders(sortProviders(state.providers));
 }
 
@@ -804,7 +859,11 @@ async function incrementWhatsappClicks(providerId) {
 
 function bindNavigation() {
   document.querySelectorAll("[data-route]").forEach(button => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", event => {
+      if (button.tagName === "A") {
+        event.preventDefault();
+      }
+
       const route = button.getAttribute("data-route");
 
       if (route === "dashboard" && !state.currentUser) {
@@ -919,14 +978,15 @@ async function handleSearchProviders() {
     if (!results) {
       const { data, error } = await supabase
         .from("prestadores")
-        .select("*")
-        .eq("bloqueado", false);
+        .select("*");
 
       if (error) throw error;
 
       results = (data || [])
-        .filter(provider => {
-          const matchesService = providerMatchesService(provider, service);
+      .filter(provider => {
+        if (provider.bloqueado) return false;
+
+        const matchesService = providerMatchesService(provider, service);
 
           const distanceKm = calculateDistanceKm(
             state.userLocation.latitude,
@@ -1128,7 +1188,7 @@ function bindRegister() {
       return;
     }
 
-        try {
+          try {
       const { count, error: countError } = await supabase
         .from("prestadores")
         .select("*", { count: "exact", head: true });
@@ -1158,6 +1218,7 @@ function bindRegister() {
         avaliacao_media: 0,
         visualizacoes: 0,
         cliques_whatsapp: 0,
+        bloqueado: false,
         created_at_client: new Date().toISOString()
       };
 
@@ -1167,7 +1228,10 @@ function bindRegister() {
         email: payload.email,
         password: payload.password,
         options: {
-          emailRedirectTo: window.location.origin
+          emailRedirectTo: window.location.origin,
+          data: {
+            pending_provider_profile: pendingProfile
+          }
         }
       });
 
@@ -1180,6 +1244,7 @@ function bindRegister() {
       refreshAuthUI();
 
       if (session?.user?.id) {
+        await savePendingProviderProfileInAuthMetadata(pendingProfile);
         await ensureProviderProfileForCurrentUser();
         await loadMyProvider(true);
       } else {
@@ -1244,7 +1309,7 @@ function setProfileEditMode(isEditing) {
 
   $("btnSaveProfile")?.classList.toggle("hidden", !isEditing);
   $("btnCancelEditProfile")?.classList.toggle("hidden", !isEditing);
-  $("btnToggleEditProfile")?.classList.toggle("hidden", isEditing);
+  $("btnToggleEditProfile")?.classList.toggle("hidden", isEditing || !state.currentProviderProfile);
 }
 
 function bindDashboard() {
@@ -1668,6 +1733,7 @@ async function loadMyProvider(silent = false) {
 
 function updateDashboardUI() {
   const profile = state.currentProviderProfile;
+  const logged = !!state.currentUser;
 
   if (!profile) {
     $("profileName").value = "";
@@ -1683,9 +1749,13 @@ function updateDashboardUI() {
     $("statViews").textContent = "0";
     $("statWhatsapp").textContent = "0";
     $("statRating").textContent = "0.0";
-    $("statPlan").textContent = "Sem perfil";
-    $("planMessage").textContent = "Faça login para ver o status do plano.";
+    $("statPlan").textContent = logged ? "Sem perfil" : "Sem login";
+    $("planMessage").textContent = logged
+      ? "Sua conta está autenticada, mas o perfil de prestador ainda não foi criado ou encontrado."
+      : "Faça login para ver o status do plano.";
     $("providerUrgentCallsList").innerHTML = "";
+
+    $("btnToggleEditProfile")?.classList.toggle("hidden", !profile);
 
     setProfileEditMode(false);
     updateMissingProfileNotice();
@@ -1737,6 +1807,8 @@ function updateDashboardUI() {
   }
 
   $("planMessage").textContent = partes.join(" ");
+
+  $("btnToggleEditProfile")?.classList.remove("hidden");
 
   updateMissingProfileNotice();
 
