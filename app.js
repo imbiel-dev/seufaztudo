@@ -370,21 +370,55 @@ function sanitizeProviderInsertPayload(payload, userId) {
 async function ensureProviderProfileForCurrentUser() {
   if (!supabase || !state.currentUser) return null;
 
-  const { data: existingProfile, error: existingError } = await supabase
+  const currentUserId = state.currentUser.id;
+  const currentEmail = String(state.currentUser.email || "").trim().toLowerCase();
+
+  
+  const { data: byUserId, error: byUserIdError } = await supabase
     .from("prestadores")
     .select("*")
-    .eq("user_id", state.currentUser.id)
+    .eq("user_id", currentUserId)
     .maybeSingle();
 
-  if (existingError) {
-    throw existingError;
-  }
+  if (byUserIdError) throw byUserIdError;
 
-  if (existingProfile) {
+  if (byUserId) {
     clearPendingProviderProfile();
     await clearPendingProviderProfileFromAuthMetadata();
-    return existingProfile;
+    return byUserId;
   }
+
+ 
+  if (currentEmail) {
+    const { data: byEmail, error: byEmailError } = await supabase
+      .from("prestadores")
+      .select("*")
+      .ilike("email", currentEmail)
+      .maybeSingle();
+
+    if (byEmailError) throw byEmailError;
+
+    
+    if (byEmail) {
+      if (!byEmail.user_id) {
+        const { error: linkError } = await supabase
+          .from("prestadores")
+          .update({ user_id: currentUserId })
+          .eq("id", byEmail.id);
+
+        if (linkError) throw linkError;
+      }
+
+      clearPendingProviderProfile();
+      await clearPendingProviderProfileFromAuthMetadata();
+
+      return {
+        ...byEmail,
+        user_id: currentUserId
+      };
+    }
+  }
+
 
   let pending = getPendingProviderProfile();
 
@@ -392,36 +426,29 @@ async function ensureProviderProfileForCurrentUser() {
     pending = await getPendingProviderProfileFromAuthMetadata();
   }
 
-  if (!pending) {
-    return null;
-  }
+  if (!pending) return null;
 
-  const pendingEmail = String(pending.email || "").toLowerCase();
-  const currentEmail = String(state.currentUser.email || "").toLowerCase();
+  const pendingEmail = String(pending.email || "").trim().toLowerCase();
 
   if (!pendingEmail || pendingEmail !== currentEmail) {
     return null;
   }
 
-  const insertPayload = sanitizeProviderInsertPayload(pending, state.currentUser.id);
+  const insertPayload = sanitizeProviderInsertPayload(pending, currentUserId);
 
   const { error: insertError } = await supabase
     .from("prestadores")
     .insert(insertPayload);
 
-  if (insertError) {
-    throw insertError;
-  }
+  if (insertError) throw insertError;
 
   const { data: createdProfile, error: createdError } = await supabase
     .from("prestadores")
     .select("*")
-    .eq("user_id", state.currentUser.id)
+    .eq("user_id", currentUserId)
     .maybeSingle();
 
-  if (createdError) {
-    throw createdError;
-  }
+  if (createdError) throw createdError;
 
   if (createdProfile) {
     clearPendingProviderProfile();
@@ -601,6 +628,12 @@ function formatCurrency(value) {
   });
 }
 
+function isBoostActive(provider) {
+  if (!provider) return false;
+  if (!provider.boost_ate) return !!provider.boost_ativo;
+  return new Date(provider.boost_ate) > new Date();
+}
+
 function formatDateTimeBR(dateString) {
   if (!dateString) return "não definido";
 
@@ -667,8 +700,8 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
 
 function sortProviders(list) {
   return [...list].sort((a, b) => {
-    const boostA = a.boost_ativo ? 1 : 0;
-    const boostB = b.boost_ativo ? 1 : 0;
+    const boostA = isBoostActive(a) ? 1 : 0;
+    const boostB = isBoostActive(b) ? 1 : 0;
     if (boostB !== boostA) return boostB - boostA;
 
     const ratingA = Number(a.avaliacao_media || 0);
@@ -761,7 +794,7 @@ function renderProviders(list) {
 
     const badges = fragment.querySelector(".provider-badges");
 
-    if (provider.boost_ativo) {
+    if (isBoostActive(provider)) {
       const badge = document.createElement("span");
       badge.className = "badge badge-boost";
       badge.textContent = "Boost";
@@ -787,14 +820,13 @@ function renderProviders(list) {
 
     const viewProfileBtn = fragment.querySelector(".btn-view-profile");
     viewProfileBtn.addEventListener("click", async () => {
-      showAlert(
-        `${provider.nome || "Prestador"} • ${servicesText} • ${formatCurrency(
-          provider.preco_medio
-        )} • ⭐ ${Number(provider.avaliacao_media || 0).toFixed(1)}`,
-        "info"
-      );
+      const url = new URL(window.location.href);
+      url.searchParams.set("prestador", provider.id);
+      window.history.pushState({}, "", url);
 
       await incrementProviderViews(provider.id);
+      await loadPublicProfile();
+      navigate("home");
     });
 
     const whatsappBtn = fragment.querySelector(".btn-whatsapp");
@@ -933,8 +965,16 @@ function bindHome() {
 }
 
 async function handleSearchProviders() {
-  const service = normalizeService($("searchService").value.trim());
+  const rawService = $("searchService").value.trim();
+  const service = normalizeService(rawService);
   const radiusKm = Number($("searchRadius").value || 10);
+
+  if (!rawService) {
+    showAlert("Digite o serviço que você está procurando.", "error");
+    $("providersList").innerHTML = "";
+    $("resultsCount").textContent = "0 resultados";
+    return;
+  }
 
   if (!state.userLocation) {
     showAlert("Ative sua localização primeiro.", "error");
@@ -954,7 +994,7 @@ async function handleSearchProviders() {
         user_lat: state.userLocation.latitude,
         user_lng: state.userLocation.longitude,
         raio_metros: radiusKm * 1000,
-        servico_busca: service || null
+        servico_busca: service
       });
 
       if (!rpcResponse.error && Array.isArray(rpcResponse.data)) {
@@ -971,7 +1011,8 @@ async function handleSearchProviders() {
                     Number(provider.longitude)
                   )
           }))
-          .filter(provider => providerMatchesService(provider, service));
+          .filter(provider => providerMatchesService(provider, service))
+          .filter(provider => !provider.bloqueado);
       }
     }
 
@@ -983,10 +1024,9 @@ async function handleSearchProviders() {
       if (error) throw error;
 
       results = (data || [])
-      .filter(provider => {
-        if (provider.bloqueado) return false;
-
-        const matchesService = providerMatchesService(provider, service);
+        .filter(provider => {
+          if (provider.bloqueado) return false;
+          if (!providerMatchesService(provider, service)) return false;
 
           const distanceKm = calculateDistanceKm(
             state.userLocation.latitude,
@@ -997,10 +1037,7 @@ async function handleSearchProviders() {
 
           provider.distanceKm = distanceKm;
 
-          const withinRadius =
-            typeof distanceKm === "number" && distanceKm <= radiusKm;
-
-          return matchesService && withinRadius;
+          return typeof distanceKm === "number" && distanceKm <= radiusKm;
         })
         .map(provider => ({
           ...provider,
@@ -1264,7 +1301,7 @@ function bindRegister() {
       } else {
         navigate("login");
         showAlert(
-          "Conta criada. Agora confirme seu e-mail e depois faça login para finalizar a criação do perfil de prestador.",
+          "Conta criada com sucesso. Confirme seu e-mail no link enviado e, depois disso, entre normalmente. Quando a sessão for reconhecida, você será levado ao dashboard.",
           "success"
         );
       }
@@ -1703,24 +1740,60 @@ async function loadMyProvider(silent = false) {
     await ensureProviderProfileForCurrentUser();
   } catch (profileError) {
     console.error(profileError);
-    if (!silent) showAlert(profileError.message || "Erro ao finalizar seu perfil.", "error");
+    if (!silent) {
+      showAlert(profileError.message || "Erro ao finalizar seu perfil.", "error");
+    }
   }
 
-  const { data, error } = await supabase
+  let profile = null;
+
+  const { data: byUserId, error: byUserIdError } = await supabase
     .from("prestadores")
     .select("*")
     .eq("user_id", state.currentUser.id)
     .maybeSingle();
 
-  if (error) {
-    console.error(error);
+  if (byUserIdError) {
+    console.error(byUserIdError);
     if (!silent) showAlert("Erro ao carregar seu perfil.", "error");
     return;
   }
 
-  state.currentProviderProfile = data || null;
+  profile = byUserId || null;
+
+  if (!profile && state.currentUser.email) {
+    const { data: byEmail, error: byEmailError } = await supabase
+      .from("prestadores")
+      .select("*")
+      .ilike("email", state.currentUser.email)
+      .maybeSingle();
+
+    if (byEmailError) {
+      console.error(byEmailError);
+      if (!silent) showAlert("Erro ao carregar seu perfil.", "error");
+      return;
+    }
+
+    if (byEmail) {
+      profile = byEmail;
+
+      if (!byEmail.user_id) {
+        const { error: linkError } = await supabase
+          .from("prestadores")
+          .update({ user_id: state.currentUser.id })
+          .eq("id", byEmail.id);
+
+        if (!linkError) {
+          profile.user_id = state.currentUser.id;
+        }
+      }
+    }
+  }
+
+  state.currentProviderProfile = profile;
   state.isEditingProfile = false;
   state.profileDraftBackup = null;
+
   refreshAuthUI();
   updateMissingProfileNotice();
   updateDashboardUI();
@@ -1785,8 +1858,7 @@ function updateDashboardUI() {
   const assinaturaAtiva =
     profile.assinatura_ate && new Date(profile.assinatura_ate) > now;
 
-  const boostAtivo =
-    (profile.boost_ate && new Date(profile.boost_ate) > now) || !!profile.boost_ativo;
+  const boostAtivo = isBoostActive(profile);
 
   $("statPlan").textContent = assinaturaAtiva ? "Assinatura ativa" : "Grátis / sem assinatura";
 
@@ -2201,6 +2273,30 @@ async function processPaymentReturn() {
   }
 }
 
+async function processAuthReturn() {
+  const url = new URL(window.location.href);
+  const hasAuthParams =
+    url.hash.includes("access_token") ||
+    url.hash.includes("refresh_token") ||
+    url.searchParams.get("type") ||
+    url.searchParams.get("access_token");
+
+  if (!hasAuthParams) return;
+
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+
+  if (session?.user) {
+    state.currentUser = session.user;
+    await loadMyProvider(true);
+    refreshAuthUI();
+    redirectAfterAuth();
+
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
+
 function clearRealtimeChannels() {
   if (!supabase || !state.realtimeChannels.length) return;
 
@@ -2277,6 +2373,26 @@ function initRealtime() {
   state.realtimeChannels.push(channelUrgentCalls, channelResponses, channelStatus);
 }
 
+function redirectAfterAuth() {
+  if (!state.currentUser) return;
+
+  if (isAdminUser()) {
+    navigate("admin");
+    return;
+  }
+
+  navigate("dashboard");
+
+  if (state.currentProviderProfile) {
+    showAlert("Você entrou com sucesso.", "success");
+  } else {
+    showAlert(
+      "Sua conta foi confirmada e você entrou. Agora vamos finalizar ou localizar seu perfil de prestador.",
+      "info"
+    );
+  }
+}
+
 async function restoreSession() {
   if (!supabase) return;
 
@@ -2289,15 +2405,28 @@ async function restoreSession() {
 
   if (state.currentUser) {
     await loadMyProvider(true);
+    initRealtime();
+
+    const currentScreen = document.querySelector(".screen.active")?.id || "";
+    const isAuthScreen =
+      currentScreen === "screen-login" || currentScreen === "screen-register";
+
+    if (isAuthScreen || state.currentRoute === "login" || state.currentRoute === "register") {
+      redirectAfterAuth();
+    }
   }
 
-  supabase.auth.onAuthStateChange(async (_event, sessionNow) => {
+  supabase.auth.onAuthStateChange(async (event, sessionNow) => {
     state.currentUser = sessionNow?.user || null;
     refreshAuthUI();
 
     if (state.currentUser) {
       await loadMyProvider(true);
       initRealtime();
+
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        redirectAfterAuth();
+      }
     } else {
       state.currentProviderProfile = null;
       state.isEditingProfile = false;
@@ -2324,9 +2453,37 @@ async function loadPublicProfile() {
     .eq("id", prestadorId)
     .single();
 
-  if (error || !data) return;
+  if (error || !data) {
+    showAlert("Perfil público não encontrado.", "error");
+    return;
+  }
 
-  renderProviders([data]);
+  $("providersList").innerHTML = `
+    <div class="card">
+      <h3>${escapeHtml(data.nome || "Prestador")}</h3>
+      <p class="muted">${escapeHtml(getProviderServices(data).join(", ") || "Serviço não informado")}</p>
+      <p>${escapeHtml(data.descricao || "Sem descrição cadastrada.")}</p>
+
+      <div class="provider-meta">
+        <span class="meta-pill">${Number(data.experiencia_anos || 0)} anos de experiência</span>
+        <span class="meta-pill">${formatCurrency(data.preco_medio)}</span>
+        <span class="meta-pill">⭐ ${Number(data.avaliacao_media || 0).toFixed(1)}</span>
+        <span class="meta-pill">Atende até ${Number(data.raio_km || 0)} km</span>
+      </div>
+
+      <div class="provider-actions">
+        <a class="btn btn-whatsapp" target="_blank" rel="noopener noreferrer"
+           href="${toWhatsappLink(
+             data.whatsapp,
+             `Olá ${data.nome || ""}, encontrei seu perfil no seufaztudo e gostaria de solicitar um orçamento.`
+           )}">
+          Falar no WhatsApp
+        </a>
+      </div>
+    </div>
+  `;
+
+  $("resultsCount").textContent = "1 resultado";
 }
 
 
@@ -2353,6 +2510,25 @@ async function avaliarPrestador(prestadorId) {
       });
 
     if (error) throw error;
+
+    const { data: ratings, error: ratingsError } = await supabase
+      .from("avaliacoes")
+      .select("nota")
+      .eq("prestador_id", prestadorId);
+
+    if (ratingsError) throw ratingsError;
+
+    const media =
+      ratings.length > 0
+        ? ratings.reduce((acc, item) => acc + Number(item.nota || 0), 0) / ratings.length
+        : 0;
+
+    const { error: updateRatingError } = await supabase
+      .from("prestadores")
+      .update({ avaliacao_media: Number(media.toFixed(1)) })
+      .eq("id", prestadorId);
+
+    if (updateRatingError) throw updateRatingError;
 
     showAlert("Avaliação enviada com sucesso.", "success");
     await fetchProviders();
@@ -2388,7 +2564,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupServiceAutocomplete("urgentService", "urgentServiceSuggestions", "urgentServiceHint");
 
   await restoreSession();
-  await fetchProviders();
+  await processAuthReturn();
   initRealtime();
   processPaymentReturn();
   loadPublicProfile();
