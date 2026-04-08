@@ -1706,16 +1706,6 @@ function bindPayments() {
   });
 }
 
-await loadPublicProfile();
-
-  const hasPrestadorParam = new URL(window.location.href).searchParams.has("prestador");
-
-  if (hasPrestadorParam) {
-    navigate("provider-profile");
-  } else {
-    renderSearchEmptyState("initial");
-  }
-
 function bindUrgent() {
   $("btnUrgentLocation")?.addEventListener("click", async () => {
     try {
@@ -2884,6 +2874,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   await restoreSession();
   initRealtime();
   processPaymentReturn();
+
+  await loadPublicProfile();
+
+  const hasPrestadorParam = new URL(window.location.href).searchParams.has("prestador");
+
+  if (hasPrestadorParam) {
+    navigate("provider-profile");
+  } else {
+    renderSearchEmptyState("initial");
+  }
 
   const footerYear = document.getElementById("footerYear");
   if (footerYear) {
