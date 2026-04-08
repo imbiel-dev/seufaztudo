@@ -23,6 +23,7 @@ const routes = ["home", "provider-profile", "login", "register", "dashboard", "u
 
 
 const PENDING_PROVIDER_PROFILE_KEY = "seufaztudo_pending_provider_profile";
+const PUBLIC_RATING_STORAGE_KEY = "seufaztudo_public_ratings";
 
 const SERVICE_ALIASES = {
   "eletricista": "Eletricista",
@@ -304,6 +305,30 @@ function getPendingProviderProfile() {
 
 function clearPendingProviderProfile() {
   localStorage.removeItem(PENDING_PROVIDER_PROFILE_KEY);
+}
+
+function getPublicRatedProviders() {
+  try {
+    const raw = localStorage.getItem(PUBLIC_RATING_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function hasPublicRatedProvider(providerId) {
+  const ratings = getPublicRatedProviders();
+  return !!ratings[String(providerId)];
+}
+
+function markPublicRatedProvider(providerId, nota) {
+  const ratings = getPublicRatedProviders();
+  ratings[String(providerId)] = {
+    nota,
+    created_at: new Date().toISOString()
+  };
+  localStorage.setItem(PUBLIC_RATING_STORAGE_KEY, JSON.stringify(ratings));
 }
 
 async function savePendingProviderProfileInAuthMetadata(payload) {
@@ -747,7 +772,6 @@ async function fetchProviders() {
   }
 
   state.providers = (data || []).filter(provider => !provider.bloqueado);
-  renderProviders(sortProviders(state.providers));
 }
 
 function renderSearchEmptyState(mode = "initial", options = {}) {
@@ -933,6 +957,7 @@ function bindPublicProfile() {
     url.searchParams.delete("prestador");
     window.history.pushState({}, "", url);
     navigate("home");
+    renderSearchEmptyState("initial");
   });
 }
 
@@ -1569,14 +1594,20 @@ function bindDashboard() {
       location: `POINT(${lng} ${lat})`
     };
 
-    try {
+        try {
       setButtonLoading(submitBtn, true, "Salvando...");
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
 
       const { error } = await supabase
         .from("prestadores")
         .update(updated)
         .eq("id", state.currentProviderProfile.id)
-        .eq("user_id", state.currentUser.id);
+        .eq("user_id", state.currentUser.id)
+        .abortSignal(controller.signal);
+
+      clearTimeout(timeout);
 
       if (error) throw error;
 
@@ -1593,14 +1624,17 @@ function bindDashboard() {
         };
       }
 
-      renderProviders(sortProviders(state.providers));
-      updateDashboardUI();
       state.profileDraftBackup = null;
+      updateDashboardUI();
       setProfileEditMode(false);
       showAlert("Perfil salvo com sucesso.", "success");
     } catch (error) {
       console.error(error);
-      showAlert(mapAuthErrorMessage(error) || "Erro ao salvar perfil.", "error");
+      if (error.name === "AbortError") {
+        showAlert("Salvar perfil demorou demais para responder. Verifique a conexão e as policies da tabela prestadores.", "error");
+      } else {
+        showAlert(mapAuthErrorMessage(error) || "Erro ao salvar perfil.", "error");
+      }
     } finally {
       setButtonLoading(submitBtn, false);
     }
@@ -1672,47 +1706,15 @@ function bindPayments() {
   });
 }
 
-async function startCheckout(tipo) {
-  if (!state.currentUser || !state.currentProviderProfile) {
-    showAlert("Faça login como prestador.", "error");
-    return;
+await loadPublicProfile();
+
+  const hasPrestadorParam = new URL(window.location.href).searchParams.has("prestador");
+
+  if (hasPrestadorParam) {
+    navigate("provider-profile");
+  } else {
+    renderSearchEmptyState("initial");
   }
-
-  try {
-    const {
-      data: { session }
-    } = await supabase.auth.getSession();
-
-    const response = await fetch("/api/create-checkout", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${session?.access_token || ""}`
-      },
-      body: JSON.stringify({
-        tipo,
-        prestadorId: state.currentProviderProfile.id,
-        nomePrestador: state.currentProviderProfile.nome,
-        emailPrestador: state.currentUser.email
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data?.error || "Erro ao iniciar pagamento.");
-    }
-
-    if (!data.checkoutUrl) {
-      throw new Error("A URL do checkout não foi retornada.");
-    }
-
-    window.location.href = data.checkoutUrl;
-  } catch (error) {
-    console.error(error);
-    showAlert(error.message || "Erro ao iniciar pagamento.", "error");
-  }
-}
 
 function bindUrgent() {
   $("btnUrgentLocation")?.addEventListener("click", async () => {
@@ -1793,7 +1795,6 @@ async function createUrgentCall() {
         descricao,
         latitude: state.urgentLocation.latitude,
         longitude: state.urgentLocation.longitude,
-        location: `POINT(${state.urgentLocation.longitude} ${state.urgentLocation.latitude})`,
         status: "aberto",
         expira_em: new Date(Date.now() + 30 * 60 * 1000).toISOString()
       })
@@ -2709,6 +2710,8 @@ async function loadPublicProfile() {
     `Olá ${data.nome || ""}, encontrei seu perfil no seufaztudo e gostaria de solicitar um orçamento.`
   );
 
+  const alreadyRated = hasPublicRatedProvider(data.id);
+
   container.innerHTML = `
     <article class="public-profile-card">
       <div class="public-profile-header">
@@ -2747,6 +2750,12 @@ async function loadPublicProfile() {
               ? `<a id="publicProfileWhatsappBtn" class="btn btn-whatsapp" target="_blank" rel="noopener noreferrer" href="${whatsappLink}">Falar no WhatsApp</a>`
               : `<button class="btn btn-secondary" type="button" disabled>WhatsApp não informado</button>`
           }
+
+          ${
+            alreadyRated
+              ? `<button class="btn btn-secondary" type="button" disabled>Você já avaliou</button>`
+              : `<button id="btnPublicRateProvider" class="btn btn-secondary" type="button">Avaliar prestador</button>`
+          }
         </div>
       </div>
     </article>
@@ -2759,30 +2768,53 @@ async function loadPublicProfile() {
     });
   }
 
+  const rateBtn = $("btnPublicRateProvider");
+  if (rateBtn) {
+    rateBtn.addEventListener("click", async () => {
+      await avaliarPrestador(data.id, { publicMode: true });
+      await loadPublicProfile();
+    });
+  }
+
   navigate("provider-profile");
 }
 
-async function avaliarPrestador(prestadorId) {
+async function avaliarPrestador(prestadorId, options = {}) {
+  const { publicMode = false } = options;
+
+  if (!prestadorId) {
+    showAlert("Prestador inválido.", "error");
+    return;
+  }
+
+  if (publicMode && hasPublicRatedProvider(prestadorId)) {
+    showAlert("Você já avaliou este prestador neste navegador.", "info");
+    return;
+  }
+
   const notaTexto = prompt("Dê uma nota de 1 a 5:");
   if (notaTexto === null) return;
 
   const nota = Number(notaTexto);
+
   if (!Number.isInteger(nota) || nota < 1 || nota > 5) {
-    showAlert("Nota inválida. Use de 1 a 5.", "error");
+    showAlert("Nota inválida. Use um número de 1 a 5.", "error");
     return;
   }
 
-  const comentario = (prompt("Comentário opcional:") || "").trim().slice(0, 500);
-
   try {
+    const insertPayload = {
+      prestador_id: prestadorId,
+      nota
+    };
+
+    if (!publicMode && state.myUrgentCallId) {
+      insertPayload.chamado_id = state.myUrgentCallId;
+    }
+
     const { error } = await supabase
       .from("avaliacoes")
-      .insert({
-        prestador_id: prestadorId,
-        chamado_id: state.myUrgentCallId,
-        nota,
-        comentario
-      });
+      .insert(insertPayload);
 
     if (error) throw error;
 
@@ -2798,17 +2830,28 @@ async function avaliarPrestador(prestadorId) {
         ? ratings.reduce((acc, item) => acc + Number(item.nota || 0), 0) / ratings.length
         : 0;
 
+    const roundedMedia = Number(media.toFixed(1));
+
     const { error: updateRatingError } = await supabase
       .from("prestadores")
-      .update({ avaliacao_media: Number(media.toFixed(1)) })
+      .update({ avaliacao_media: roundedMedia })
       .eq("id", prestadorId);
 
     if (updateRatingError) throw updateRatingError;
+
+    if (publicMode) {
+      markPublicRatedProvider(prestadorId, nota);
+      showAlert("Avaliação enviada com sucesso.", "success");
+      await fetchProviders();
+      await loadPublicProfile();
+      return;
+    }
 
     showAlert("Avaliação enviada com sucesso.", "success");
     await fetchProviders();
     await loadMyUrgentResponses();
   } catch (error) {
+    console.error(error);
     showAlert(error.message || "Erro ao enviar avaliação.", "error");
   }
 }
@@ -2839,13 +2882,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupServiceAutocomplete("urgentService", "urgentServiceSuggestions", "urgentServiceHint");
 
   await restoreSession();
-  fetchProviders();
   initRealtime();
   processPaymentReturn();
 
   await loadPublicProfile();
 
-  renderSearchEmptyState("initial");
+  const hasPrestadorParam = new URL(window.location.href).searchParams.has("prestador");
+
+  if (hasPrestadorParam) {
+    navigate("provider-profile");
+  } else {
+    renderSearchEmptyState("initial");
+  }
 
   const footerYear = document.getElementById("footerYear");
 if (footerYear) {
