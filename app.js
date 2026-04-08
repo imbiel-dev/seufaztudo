@@ -2885,19 +2885,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   initRealtime();
   processPaymentReturn();
 
-  await loadPublicProfile();
-
-  const hasPrestadorParam = new URL(window.location.href).searchParams.has("prestador");
-
-  if (hasPrestadorParam) {
-    navigate("provider-profile");
-  } else {
-    renderSearchEmptyState("initial");
-  }
-
   const footerYear = document.getElementById("footerYear");
-if (footerYear) {
-  footerYear.textContent = String(new Date().getFullYear());
-}
-
+  if (footerYear) {
+    footerYear.textContent = String(new Date().getFullYear());
+  }
 });
