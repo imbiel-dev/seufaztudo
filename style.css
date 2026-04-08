@@ -39,8 +39,12 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: url("img/map.png") center / cover no-repeat;
-  opacity: 0.3;
+  background:
+    linear-gradient(rgba(246, 243, 238, 0.78), rgba(246, 243, 238, 0.78)),
+    url("img/map.png") center top / 1400px auto no-repeat;
+  opacity: 0.18;
+  will-change: opacity;
+  transform: translateZ(0);
 }
 
 h1, h2, h3, h4, p {
@@ -67,11 +71,11 @@ button {
 .topbar {
   width: 100%;
   border-bottom: 1px solid rgba(0,0,0,0.05);
-  background: rgba(255,255,255,0.85);
-  backdrop-filter: blur(10px);
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 40;
   padding: 16px 24px;
   display: flex;
   justify-content: space-between;
@@ -496,6 +500,8 @@ button {
   border-radius: 14px;
   font-weight: 600;
   border: 1px solid transparent;
+  line-height: 1.5;
+  white-space: normal;
 }
 
 .alert-success {
@@ -697,7 +703,164 @@ button {
   color: var(--muted);
 }
 
+.actions-profile-edit {
+  flex-wrap: wrap;
+}
+
+.actions-profile-edit .btn {
+  flex: 1 1 180px;
+}
+
+#profileServiceHint {
+  margin-top: 2px;
+}
+
+#formChangePassword .btn[disabled],
+#formProfile .btn[disabled] {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.public-profile-container {
+  display: grid;
+  gap: 18px;
+}
+
+.public-profile-card {
+  display: grid;
+  gap: 18px;
+}
+
+.public-profile-header {
+  background: linear-gradient(135deg, #1F4B5C, #3CB179);
+  color: white;
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 14px 34px rgba(0,0,0,0.10);
+}
+
+.public-profile-header h2 {
+  margin: 10px 0 8px;
+  font-size: 2rem;
+}
+
+.public-profile-services {
+  margin: 0;
+  color: rgba(255,255,255,0.9);
+  font-size: 1rem;
+}
+
+.public-profile-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 16px;
+}
+
+.provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.search-actions {
+  flex-wrap: wrap;
+}
+
+.search-empty-card {
+  text-align: left;
+}
+
+.search-empty-card h3 {
+  margin-bottom: 10px;
+}
+
+.search-empty-tips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+#searchLocationHelp {
+  display: block;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.urgent-actions {
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.urgent-actions .btn {
+  flex: 1 1 220px;
+}
+
+.urgent-location-box {
+  margin-top: 18px;
+}
+
+#urgentLocationHelp {
+  display: block;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+#screen-urgent .card {
+  margin-bottom: 24px;
+}
+
+#screen-urgent textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+#urgentResponsesList,
+#providerUrgentCallsList {
+  display: grid;
+  gap: 16px;
+}
+
+.urgent-empty-card {
+  padding-top: 26px;
+  padding-bottom: 26px;
+}
+
+html {
+  scroll-padding-top: 110px;
+}
+
+.screen {
+  scroll-margin-top: 110px;
+}
+
+#passwordRecoveryNotice {
+  margin-bottom: 14px;
+}
+
+#formChangePassword .small-muted,
+#screen-login .auth-links {
+  line-height: 1.5;
+}
+
+.link-btn[disabled],
+.btn[disabled] {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
 @media (max-width: 900px) {
+  .public-profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .public-profile-header h2 {
+    font-size: 1.6rem;
+  }
+
   .grid-2,
   .grid-3,
   .stats-grid {

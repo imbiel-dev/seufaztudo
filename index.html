@@ -25,25 +25,12 @@
       <button class="nav-btn" data-route="register">Cadastrar prestador</button>
       <button class="nav-btn hidden" id="btnDashboard" data-route="dashboard">Dashboard</button>
       <button class="nav-btn hidden" id="btnLogout">Sair</button>
-      <button class="nav-btn hidden" id="btnAdmin" data-route="admin">Admin</button>
     </nav>
   </header>
 
   <main class="container">
     <section id="alertBox" class="alert hidden"></section>
 
-    <section class="screen" id="screen-admin">
-      <div class="card">
-        <h2>Painel administrativo</h2>
-        <p class="muted">Lista de prestadores cadastrados.</p>
-
-        <div class="actions">
-          <button id="btnLoadAdminProviders" class="btn" type="button">Carregar prestadores</button>
-        </div>
-
-        <div id="adminProvidersList" class="providers-list"></div>
-      </div>
-    </section>
     <!-- HOME -->
     <section class="screen active" id="screen-home">
       <div class="hero">
@@ -89,26 +76,38 @@
         <div class="location-box">
           <strong>Sua localização:</strong>
           <span id="userLocationText">não definida</span>
+          <small id="searchLocationHelp" class="small-muted">
+            Use sua localização para encontrar os prestadores mais próximos. Se não permitir acesso, a busca ainda poderá mostrar resultados gerais do serviço.
+          </small>
         </div>
 
-        <div class="actions">
+        <div class="actions search-actions">
           <button id="btnSearch" class="btn" type="button">Buscar</button>
+          <button id="btnClearSearch" class="btn btn-secondary" type="button">Limpar busca</button>
         </div>
-      </div>
 
       <div class="results-header">
         <h3>Prestadores encontrados</h3>
-        <span id="resultsCount">0 resultados</span>
+        <span id="resultsCount">Preencha a busca para começar</span>
       </div>
 
       <div id="providersList" class="providers-list"></div>
+    </section>
+
+    <section class="screen" id="screen-provider-profile">
+      <div class="results-header">
+        <h3>Perfil do prestador</h3>
+        <button id="btnBackToHomeFromProfile" class="btn btn-secondary" type="button">Voltar para a busca</button>
+      </div>
+
+      <div id="publicProfileContainer" class="public-profile-container"></div>
     </section>
 
     <!-- LOGIN -->
     <section class="screen" id="screen-login">
       <div class="card auth-card">
         <h3>Entrar</h3>
-        <p class="muted">Acesse sua conta de prestador.</p>
+        <p class="muted">Entre com seu e-mail e senha. Se você acabou de confirmar o e-mail, sua entrada será reconhecida automaticamente.</p>
 
         <form id="formLogin">
           <div class="field">
@@ -140,7 +139,7 @@
       <div class="card">
         <h3>Cadastro de prestador</h3>
         <p class="muted">
-          Os primeiros 500 prestadores recebem 3 meses grátis no lançamento.
+          Os primeiros 500 prestadores aprovados na plataforma recebem 3 meses de acesso promocional grátis no lançamento. Após esse período, poderão optar pelos recursos pagos disponíveis.
         </p>
 
         <form id="formRegister">
@@ -231,7 +230,7 @@
 
           <div class="card info-card">
             <p class="small-muted">
-              Após concluir o cadastro, confirme sua conta no link enviado para o seu e-mail.
+              Após concluir o cadastro, confirme sua conta no link enviado para o seu e-mail. Depois disso, seu acesso será reconhecido automaticamente e seu perfil poderá ser finalizado no dashboard.
             </p>
           </div>
 
@@ -278,7 +277,7 @@
       </div>
 
       <div id="providerMissingProfileNotice" class="alert alert-error hidden">
-        Sua conta foi autenticada, mas seu perfil de prestador ainda não foi encontrado.
+        Sua conta foi autenticada, mas ainda estamos finalizando ou localizando seu perfil de prestador.
       </div>
 
       <div class="stats-grid">
@@ -311,7 +310,7 @@
 
         <div class="stat-card">
           <span>Status do plano</span>
-          <strong id="statPlan">Grátis no lançamento</strong>
+          <strong id="statPlan">Carregando...</strong>
         </div>
       </div>
 
@@ -337,10 +336,18 @@
             </div>
 
             <div class="field autocomplete-field">
-              <label for="profileService">Serviço principal</label>
-              <input id="profileService" type="text" autocomplete="off" disabled />
+              <label for="profileService">Serviços</label>
+              <input
+                id="profileService"
+                type="text"
+                autocomplete="off"
+                placeholder="Ex: eletricista, encanador, pintor"
+                disabled
+              />
               <div id="profileServiceSuggestions" class="autocomplete-box hidden"></div>
-              <small id="profileServiceHint" class="small-muted hidden"></small>
+              <small id="profileServiceHint" class="small-muted hidden">
+                Separe vários serviços por vírgula.
+              </small>
             </div>
 
             <div class="field">
@@ -387,8 +394,8 @@
             <span id="profileLocationText">não definida</span>
           </div>
 
-          <div class="actions">
-            <button type="submit" id="btnSaveProfile" class="btn hidden">Salvar perfil</button>
+          <div class="actions actions-profile-edit">
+            <button type="submit" id="btnSaveProfile" class="btn hidden">Salvar alterações</button>
             <button type="button" id="btnCancelEditProfile" class="btn btn-secondary hidden">Cancelar</button>
           </div>
         </form>
@@ -396,6 +403,14 @@
 
       <div class="card">
         <h3>Alterar senha</h3>
+
+        <div id="passwordRecoveryNotice" class="alert alert-info hidden">
+          Seu link de recuperação foi validado. Defina sua nova senha abaixo para concluir o processo.
+        </div>
+
+        <p class="small-muted">
+          Use pelo menos 6 caracteres. Após atualizar, sua nova senha passa a valer imediatamente.
+        </p>
 
         <form id="formChangePassword">
           <div class="field">
@@ -462,14 +477,17 @@
             <textarea id="urgentDescription" rows="4" placeholder="Ex: vazamento na cozinha" required></textarea>
           </div>
 
-          <div class="actions">
+          <div class="actions urgent-actions">
             <button type="button" id="btnUrgentLocation" class="btn btn-secondary">Usar minha localização</button>
-            <button type="submit" class="btn">Enviar chamado</button>
+            <button type="submit" id="btnSubmitUrgent" class="btn">Enviar chamado</button>
           </div>
 
-          <div class="location-box">
+          <div class="location-box urgent-location-box">
             <strong>Local do chamado:</strong>
             <span id="urgentLocationText">não definido</span>
+            <small id="urgentLocationHelp" class="small-muted">
+              Sua localização ajuda a encontrar prestadores próximos mais rápido. Se não funcionar, tente novamente em um local com GPS mais preciso.
+            </small>
           </div>
         </form>
       </div>
@@ -477,7 +495,7 @@
       <div class="card">
         <h3>Respostas do seu chamado</h3>
         <p class="muted">
-          Depois de enviar, os prestadores próximos poderão responder aqui.
+          Depois de enviar, os prestadores próximos poderão responder aqui. Mantenha esta página aberta ou atualize para acompanhar novas respostas.
         </p>
 
         <div class="actions">
@@ -637,7 +655,7 @@
     <p>
       Para dúvidas jurídicas, notificações, denúncias, direitos de titular de dados
       e solicitações relacionadas à plataforma, utilize:
-      <strong>contato.seufaztudo@gmail.com</strong>
+      <strong>atendimento@seufaztudo.com.br</strong>
     </p>
 
     <h3>15. Lei aplicável e foro</h3>
@@ -666,9 +684,9 @@
     <h3>2. Quem é o controlador</h3>
     <p>
       Controlador dos dados pessoais tratados no contexto da plataforma:
-      <strong>[PREENCHER NOME / RAZÃO SOCIAL]</strong>,
-      <strong>[PREENCHER CPF OU CNPJ]</strong>,
-      e-mail de contato: <strong>contato.seufaztudo@gmail.com</strong>.
+      <strong>Gabriel e Robert, responsáveis pelo seufaztudo</strong>,
+      inscrição fiscal a ser informada após formalização empresarial,
+      e-mail de contato: <strong>atendimento@seufaztudo.com.br</strong>.
     </p>
 
     <h3>3. Dados que podemos coletar</h3>
@@ -678,7 +696,7 @@
       <li>dados profissionais e comerciais do prestador, como serviço principal, descrição, preço médio, raio de atendimento e experiência;</li>
       <li>dados de geolocalização e coordenadas quando você autoriza o uso de localização;</li>
       <li>dados de uso, navegação, interações, cliques, visualizações, chamados, respostas e registros técnicos;</li>
-      <li>dados relacionados a pagamentos de funcionalidades da plataforma;</li>
+      <li>dados relacionados a pagamentos de funcionalidades da plataforma, como contratação de boost, assinatura, status da cobrança e identificadores da transação;</li>
       <li>comunicações enviadas por formulários, suporte, denúncias ou solicitações de privacidade.</li>
     </ul>
 
@@ -762,7 +780,7 @@
     <h3>11. Canal para privacidade</h3>
     <p>
       Solicitações relacionadas a dados pessoais podem ser encaminhadas para
-      <strong>contato.seufaztudo@gmail.com</strong>.
+      <strong>atendimento@seufaztudo.com.br</strong>.
     </p>
 
     <h3>12. Cookies e tecnologias semelhantes</h3>
@@ -938,7 +956,7 @@
       </div>
 
       <p class="small-muted">
-        Contato jurídico e Privacidade: contato.seufaztudo@gmail.com
+        Contato jurídico e Privacidade: atendimento@seufaztudo.com.br
       </p>
     </footer>
 

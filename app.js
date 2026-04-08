@@ -4,6 +4,7 @@ const state = {
   currentProviderProfile: null,
 
   isEditingProfile: false,
+  isPasswordRecoveryMode: false,
   profileDraftBackup: null,
 
   userLocation: null,
@@ -18,13 +19,8 @@ const state = {
   realtimeChannels: []
 };
 
-const routes = ["home", "login", "register", "dashboard", "urgent", "terms", "privacy", "payments", "legal", "admin"];
+const routes = ["home", "provider-profile", "login", "register", "dashboard", "urgent", "terms", "privacy", "payments", "legal"];
 
-const ADMIN_EMAILS = [
-  "contato@seufaztudo.com.br",
-  "gabrieldacosta717@gmail.com",
-  "contato.seufaztudo@gmail.com"
-];
 
 const PENDING_PROVIDER_PROFILE_KEY = "seufaztudo_pending_provider_profile";
 
@@ -166,9 +162,10 @@ function getProviderServices(provider) {
 }
 
 function providerMatchesService(provider, serviceQuery) {
-  if (!serviceQuery) return true;
-
   const normalizedQuery = normalizeText(serviceQuery);
+
+  if (!normalizedQuery) return false;
+
   const services = getProviderServices(provider);
 
   return services.some(service =>
@@ -259,6 +256,24 @@ function setupServiceAutocomplete(inputId, boxId, hintId) {
   });
 }
 
+function setButtonLoading(button, isLoading, loadingText) {
+  if (!button) return;
+
+  if (isLoading) {
+    if (!button.dataset.originalText) {
+      button.dataset.originalText = button.textContent;
+    }
+    button.disabled = true;
+    button.textContent = loadingText || "Carregando...";
+    return;
+  }
+
+  button.disabled = false;
+  if (button.dataset.originalText) {
+    button.textContent = button.dataset.originalText;
+  }
+}
+
 function setupPasswordToggles() {
   document.querySelectorAll("[data-toggle-password]").forEach(button => {
     button.addEventListener("click", () => {
@@ -271,11 +286,6 @@ function setupPasswordToggles() {
       button.textContent = showing ? "Mostrar" : "Ocultar";
     });
   });
-}
-
-function isAdminUser() {
-  const email = state.currentUser?.email || "";
-  return ADMIN_EMAILS.includes(email.toLowerCase());
 }
 
 function savePendingProviderProfile(payload) {
@@ -373,52 +383,19 @@ async function ensureProviderProfileForCurrentUser() {
   const currentUserId = state.currentUser.id;
   const currentEmail = String(state.currentUser.email || "").trim().toLowerCase();
 
-  
-  const { data: byUserId, error: byUserIdError } = await supabase
+  const { data: existingByUserId, error: existingByUserIdError } = await supabase
     .from("prestadores")
     .select("*")
     .eq("user_id", currentUserId)
     .maybeSingle();
 
-  if (byUserIdError) throw byUserIdError;
+  if (existingByUserIdError) throw existingByUserIdError;
 
-  if (byUserId) {
+  if (existingByUserId) {
     clearPendingProviderProfile();
     await clearPendingProviderProfileFromAuthMetadata();
-    return byUserId;
+    return existingByUserId;
   }
-
- 
-  if (currentEmail) {
-    const { data: byEmail, error: byEmailError } = await supabase
-      .from("prestadores")
-      .select("*")
-      .ilike("email", currentEmail)
-      .maybeSingle();
-
-    if (byEmailError) throw byEmailError;
-
-    
-    if (byEmail) {
-      if (!byEmail.user_id) {
-        const { error: linkError } = await supabase
-          .from("prestadores")
-          .update({ user_id: currentUserId })
-          .eq("id", byEmail.id);
-
-        if (linkError) throw linkError;
-      }
-
-      clearPendingProviderProfile();
-      await clearPendingProviderProfileFromAuthMetadata();
-
-      return {
-        ...byEmail,
-        user_id: currentUserId
-      };
-    }
-  }
-
 
   let pending = getPendingProviderProfile();
 
@@ -426,36 +403,76 @@ async function ensureProviderProfileForCurrentUser() {
     pending = await getPendingProviderProfileFromAuthMetadata();
   }
 
-  if (!pending) return null;
+  const pendingEmail = String(pending?.email || "").trim().toLowerCase();
 
-  const pendingEmail = String(pending.email || "").trim().toLowerCase();
+  if (pending && pendingEmail && pendingEmail === currentEmail) {
+    const insertPayload = sanitizeProviderInsertPayload(pending, currentUserId);
 
-  if (!pendingEmail || pendingEmail !== currentEmail) {
-    return null;
+    const { error: insertError } = await supabase
+      .from("prestadores")
+      .insert(insertPayload);
+
+    if (insertError) {
+      const duplicateConflict =
+        String(insertError.message || "").toLowerCase().includes("duplicate") ||
+        String(insertError.message || "").toLowerCase().includes("unique");
+
+      if (!duplicateConflict) {
+        throw insertError;
+      }
+    }
+
+    const { data: createdOrExisting, error: createdOrExistingError } = await supabase
+      .from("prestadores")
+      .select("*")
+      .eq("user_id", currentUserId)
+      .maybeSingle();
+
+    if (createdOrExistingError) throw createdOrExistingError;
+
+    if (createdOrExisting) {
+      clearPendingProviderProfile();
+      await clearPendingProviderProfileFromAuthMetadata();
+      return createdOrExisting;
+    }
   }
 
-  const insertPayload = sanitizeProviderInsertPayload(pending, currentUserId);
+  if (currentEmail) {
+    const { data: existingByEmail, error: existingByEmailError } = await supabase
+      .from("prestadores")
+      .select("*")
+      .ilike("email", currentEmail)
+      .is("user_id", null)
+      .maybeSingle();
 
-  const { error: insertError } = await supabase
-    .from("prestadores")
-    .insert(insertPayload);
+    if (existingByEmailError) throw existingByEmailError;
 
-  if (insertError) throw insertError;
+    if (existingByEmail) {
+      const { error: attachError } = await supabase
+        .from("prestadores")
+        .update({ user_id: currentUserId })
+        .eq("id", existingByEmail.id)
+        .is("user_id", null);
 
-  const { data: createdProfile, error: createdError } = await supabase
-    .from("prestadores")
-    .select("*")
-    .eq("user_id", currentUserId)
-    .maybeSingle();
+      if (attachError) throw attachError;
 
-  if (createdError) throw createdError;
+      const { data: attachedProfile, error: attachedProfileError } = await supabase
+        .from("prestadores")
+        .select("*")
+        .eq("id", existingByEmail.id)
+        .maybeSingle();
 
-  if (createdProfile) {
-    clearPendingProviderProfile();
-    await clearPendingProviderProfileFromAuthMetadata();
+      if (attachedProfileError) throw attachedProfileError;
+
+      if (attachedProfile) {
+        clearPendingProviderProfile();
+        await clearPendingProviderProfileFromAuthMetadata();
+        return attachedProfile;
+      }
+    }
   }
 
-  return createdProfile || null;
+  return null;
 }
 
 function $(id) {
@@ -476,6 +493,71 @@ function showAlert(message, type = "info") {
   }, 5000);
 }
 
+function updatePasswordRecoveryUI() {
+  const box = $("passwordRecoveryNotice");
+  if (!box) return;
+
+  box.classList.toggle("hidden", !state.isPasswordRecoveryMode);
+
+  if (state.isPasswordRecoveryMode) {
+    box.textContent = "Seu link de recuperação foi validado. Defina sua nova senha abaixo para concluir o processo.";
+  }
+}
+
+function mapAuthErrorMessage(error) {
+  const raw =
+    String(error?.message || error || "")
+      .trim();
+
+  const normalized = raw.toLowerCase();
+
+  if (!raw) {
+    return "Ocorreu um erro de autenticação.";
+  }
+
+  if (normalized.includes("email not confirmed")) {
+    return "Seu e-mail ainda não foi confirmado. Abra a mensagem enviada para sua caixa de entrada e clique no link de confirmação.";
+  }
+
+  if (normalized.includes("invalid login credentials")) {
+    return "E-mail ou senha inválidos.";
+  }
+
+  if (normalized.includes("user already registered")) {
+    return "Este e-mail já está cadastrado. Tente entrar ou recuperar sua senha.";
+  }
+
+  if (normalized.includes("signup is disabled")) {
+    return "O cadastro está temporariamente indisponível.";
+  }
+
+  if (normalized.includes("password should be at least")) {
+    return "A senha deve ter pelo menos 6 caracteres.";
+  }
+
+  if (normalized.includes("unable to validate email address")) {
+    return "Digite um e-mail válido.";
+  }
+
+  if (normalized.includes("email rate limit exceeded")) {
+    return "Muitas tentativas em pouco tempo. Aguarde um pouco antes de tentar de novo.";
+  }
+
+  if (normalized.includes("for security purposes")) {
+    return "Por segurança, aguarde um pouco antes de repetir esta ação.";
+  }
+
+  if (normalized.includes("token has expired") || normalized.includes("otp expired")) {
+    return "Este link expirou. Solicite um novo link e tente novamente.";
+  }
+
+  if (normalized.includes("invalid token") || normalized.includes("otp")) {
+    return "O link usado é inválido ou já foi utilizado. Solicite um novo.";
+  }
+
+  return raw;
+}
+
 function navigate(route) {
   if (!routes.includes(route)) {
     route = "home";
@@ -492,130 +574,35 @@ function navigate(route) {
     target.classList.add("active");
   }
 
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (route !== "provider-profile") {
+    const container = $("publicProfileContainer");
+    if (container) {
+      container.innerHTML = "";
+    }
+  }
+
+    requestAnimationFrame(() => {
+      const topbar = document.querySelector(".topbar");
+      const targetTop = target ? target.getBoundingClientRect().top + window.scrollY : 0;
+      const offset = (topbar?.offsetHeight || 0) + 16;
+
+      window.scrollTo({
+        top: Math.max(targetTop - offset, 0),
+        behavior: "smooth"
+      });
+    });
 }
 
 function refreshAuthUI() {
   const logged = !!state.currentUser;
-  const isAdmin = isAdminUser();
 
   $("btnDashboard")?.classList.toggle("hidden", !logged);
   $("btnLogout")?.classList.toggle("hidden", !logged);
-  $("btnAdmin")?.classList.toggle("hidden", !logged || !isAdmin);
 
   document.querySelector('[data-route="login"]')?.classList.toggle("hidden", logged);
   document.querySelector('[data-route="register"]')?.classList.toggle("hidden", logged);
 }
 
-function bindAdmin() {
-  $("btnLoadAdminProviders")?.addEventListener("click", async () => {
-    await loadAdminProviders();
-  });
-}
-
-async function loadAdminProviders() {
-  if (!isAdminUser()) {
-    showAlert("Acesso negado ao painel admin.", "error");
-    return;
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from("prestadores")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    renderAdminProviders(data || []);
-  } catch (error) {
-    console.error(error);
-    showAlert(error.message || "Erro ao carregar prestadores.", "error");
-  }
-}
-
-function renderAdminProviders(providers) {
-  const container = $("adminProvidersList");
-  if (!container) return;
-
-  container.innerHTML = "";
-
-  if (!providers.length) {
-    container.innerHTML = `
-      <div class="card">
-        <h3>Nenhum prestador encontrado</h3>
-      </div>
-    `;
-    return;
-  }
-
-  providers.forEach(provider => {
-    const article = document.createElement("article");
-    article.className = "provider-card";
-
-    const servicesText = getProviderServices(provider).join(", ") || "Sem serviço";
-
-    article.innerHTML = `
-      <div class="provider-top">
-        <div>
-          <h4 class="provider-name">${escapeHtml(provider.nome || "Sem nome")}</h4>
-          <p class="provider-service">${escapeHtml(servicesText)}</p>
-        </div>
-        <div class="provider-badges">
-          ${provider.bloqueado ? `<span class="badge badge-emergency">Bloqueado</span>` : `<span class="badge badge-boost">Ativo</span>`}
-        </div>
-      </div>
-
-      <div class="provider-meta">
-        <span class="meta-pill">${escapeHtml(provider.email || "Sem email")}</span>
-        <span class="meta-pill">${escapeHtml(provider.whatsapp || "Sem WhatsApp")}</span>
-        <span class="meta-pill">⭐ ${Number(provider.avaliacao_media || 0).toFixed(1)}</span>
-        <span class="meta-pill">${Number(provider.visualizacoes || 0)} views</span>
-        <span class="meta-pill">${Number(provider.cliques_whatsapp || 0)} cliques</span>
-      </div>
-
-      <div class="actions">
-        <button class="btn btn-secondary btn-toggle-block" data-id="${provider.id}" data-blocked="${provider.bloqueado}">
-          ${provider.bloqueado ? "Desbloquear" : "Bloquear"}
-        </button>
-      </div>
-
-      <p class="provider-description">${escapeHtml(provider.descricao || "Sem descrição.")}</p>
-    `;
-
-    container.appendChild(article);
-  });
-
-  bindAdminActions();
-}
-
-function bindAdminActions() {
-  document.querySelectorAll(".btn-toggle-block").forEach(button => {
-    button.addEventListener("click", async () => {
-      const id = button.getAttribute("data-id");
-      const isBlocked = button.getAttribute("data-blocked") === "true";
-
-      try {
-        const { error } = await supabase
-          .from("prestadores")
-          .update({ bloqueado: !isBlocked })
-          .eq("id", id);
-
-        if (error) throw error;
-
-        showAlert(
-          isBlocked ? "Prestador desbloqueado." : "Prestador bloqueado.",
-          "success"
-        );
-
-        await loadAdminProviders();
-
-      } catch (error) {
-        showAlert(error.message || "Erro ao atualizar prestador.", "error");
-      }
-    });
-  });
-}
 
 function formatCoords(lat, lng) {
   return `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
@@ -763,6 +750,63 @@ async function fetchProviders() {
   renderProviders(sortProviders(state.providers));
 }
 
+function renderSearchEmptyState(mode = "initial", options = {}) {
+  const container = $("providersList");
+  const resultsCount = $("resultsCount");
+
+  if (!container || !resultsCount) return;
+
+  if (mode === "initial") {
+    resultsCount.textContent = "Preencha a busca para começar";
+    container.innerHTML = `
+      <div class="card search-empty-card">
+        <h3>Encontre prestadores perto de você</h3>
+        <p class="muted">
+          Digite o serviço que você procura e, se quiser resultados mais próximos, permita o acesso à sua localização.
+        </p>
+        <div class="search-empty-tips">
+          <span class="meta-pill">Ex: eletricista</span>
+          <span class="meta-pill">Ex: encanador</span>
+          <span class="meta-pill">Ex: diarista</span>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (mode === "missing-location") {
+    resultsCount.textContent = "Localização não definida";
+    container.innerHTML = `
+      <div class="card search-empty-card">
+        <h3>Ative sua localização para ordenar por proximidade</h3>
+        <p class="muted">
+          Você ainda pode buscar pelo serviço mesmo sem localização, mas os resultados ficarão mais gerais e sem distância precisa.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  if (mode === "no-results") {
+    const serviceText = escapeHtml(options.service || "serviço informado");
+
+    resultsCount.textContent = "0 resultados";
+    container.innerHTML = `
+      <div class="card search-empty-card">
+        <h3>Nenhum prestador encontrado</h3>
+        <p class="muted">
+          Não encontramos resultados para <strong>${serviceText}</strong> com os filtros atuais.
+        </p>
+        <div class="search-empty-tips">
+          <span class="meta-pill">Tente outro nome de serviço</span>
+          <span class="meta-pill">Aumente o raio de busca</span>
+          <span class="meta-pill">Use sua localização</span>
+        </div>
+      </div>
+    `;
+  }
+}
+
 function renderProviders(list) {
   const container = $("providersList");
   const template = $("providerCardTemplate");
@@ -772,12 +816,7 @@ function renderProviders(list) {
   $("resultsCount").textContent = `${list.length} resultado${list.length === 1 ? "" : "s"}`;
 
   if (!list.length) {
-    container.innerHTML = `
-      <div class="card">
-        <h3>Nenhum prestador encontrado</h3>
-        <p class="muted">Tente mudar o serviço, o raio ou usar sua localização.</p>
-      </div>
-    `;
+    renderSearchEmptyState("no-results");
     return;
   }
 
@@ -826,7 +865,6 @@ function renderProviders(list) {
 
       await incrementProviderViews(provider.id);
       await loadPublicProfile();
-      navigate("home");
     });
 
     const whatsappBtn = fragment.querySelector(".btn-whatsapp");
@@ -889,6 +927,15 @@ async function incrementWhatsappClicks(providerId) {
   }
 }
 
+function bindPublicProfile() {
+  $("btnBackToHomeFromProfile")?.addEventListener("click", () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("prestador");
+    window.history.pushState({}, "", url);
+    navigate("home");
+  });
+}
+
 function bindNavigation() {
   document.querySelectorAll("[data-route]").forEach(button => {
     button.addEventListener("click", event => {
@@ -902,20 +949,6 @@ function bindNavigation() {
         showAlert("Faça login para acessar o dashboard.", "error");
         navigate("login");
         return;
-      }
-
-      if (route === "admin") {
-        if (!state.currentUser) {
-          showAlert("Faça login para acessar o painel admin.", "error");
-          navigate("login");
-          return;
-        }
-
-        if (!isAdminUser()) {
-          showAlert("Acesso negado ao painel admin.", "error");
-          navigate("home");
-          return;
-        }
       }
 
       navigate(route);
@@ -955,13 +988,29 @@ function bindHome() {
       const coords = await getCurrentPosition();
       state.userLocation = coords;
       $("userLocationText").textContent = formatCoords(coords.latitude, coords.longitude);
+      $("searchLocationHelp").textContent =
+        "Localização ativa. Agora a busca pode ordenar e filtrar por proximidade.";
       showAlert("Localização capturada com sucesso.", "success");
     } catch (error) {
-      showAlert("Não foi possível obter sua localização.", "error");
+      console.error(error);
+      state.userLocation = null;
+      $("userLocationText").textContent = "não definida";
+      $("searchLocationHelp").textContent =
+        "Não foi possível usar sua localização. Você ainda pode buscar pelo serviço, mas os resultados serão mais gerais.";
+      renderSearchEmptyState("missing-location");
+      showAlert("Não foi possível obter sua localização. Você ainda pode buscar sem ela.", "info");
     }
   });
 
   $("btnSearch")?.addEventListener("click", handleSearchProviders);
+
+  $("btnClearSearch")?.addEventListener("click", () => {
+    $("searchService").value = "";
+    $("searchRadius").value = "10";
+    $("searchServiceSuggestions")?.classList.add("hidden");
+    $("searchServiceHint")?.classList.add("hidden");
+    renderSearchEmptyState("initial");
+  });
 }
 
 async function handleSearchProviders() {
@@ -971,13 +1020,7 @@ async function handleSearchProviders() {
 
   if (!rawService) {
     showAlert("Digite o serviço que você está procurando.", "error");
-    $("providersList").innerHTML = "";
-    $("resultsCount").textContent = "0 resultados";
-    return;
-  }
-
-  if (!state.userLocation) {
-    showAlert("Ative sua localização primeiro.", "error");
+    renderSearchEmptyState("initial");
     return;
   }
 
@@ -989,7 +1032,10 @@ async function handleSearchProviders() {
   try {
     let results = null;
 
-    if (typeof supabase.rpc === "function") {
+    if (
+      state.userLocation &&
+      typeof supabase.rpc === "function"
+    ) {
       const rpcResponse = await supabase.rpc("buscar_prestadores", {
         user_lat: state.userLocation.latitude,
         user_lng: state.userLocation.longitude,
@@ -1011,8 +1057,9 @@ async function handleSearchProviders() {
                     Number(provider.longitude)
                   )
           }))
+          .filter(provider => !provider.bloqueado)
           .filter(provider => providerMatchesService(provider, service))
-          .filter(provider => !provider.bloqueado);
+          .filter(provider => typeof provider.distanceKm === "number" && provider.distanceKm <= radiusKm);
       }
     }
 
@@ -1024,27 +1071,37 @@ async function handleSearchProviders() {
       if (error) throw error;
 
       results = (data || [])
-        .filter(provider => {
-          if (provider.bloqueado) return false;
-          if (!providerMatchesService(provider, service)) return false;
+        .filter(provider => !provider.bloqueado)
+        .filter(provider => providerMatchesService(provider, service))
+        .map(provider => {
+          let distanceKm = null;
 
-          const distanceKm = calculateDistanceKm(
-            state.userLocation.latitude,
-            state.userLocation.longitude,
-            Number(provider.latitude),
-            Number(provider.longitude)
-          );
+          if (state.userLocation) {
+            distanceKm = calculateDistanceKm(
+              state.userLocation.latitude,
+              state.userLocation.longitude,
+              Number(provider.latitude),
+              Number(provider.longitude)
+            );
+          }
 
-          provider.distanceKm = distanceKm;
-
-          return typeof distanceKm === "number" && distanceKm <= radiusKm;
+          return {
+            ...provider,
+            distanceKm
+          };
         })
-        .map(provider => ({
-          ...provider,
-          distanceKm: provider.distanceKm
-        }));
+        .filter(provider => {
+          if (!state.userLocation) return true;
+          return typeof provider.distanceKm === "number" && provider.distanceKm <= radiusKm;
+        });
     }
 
+    if (!results.length) {
+      renderSearchEmptyState("no-results", { service: rawService });
+      return;
+    }
+
+    $("resultsCount").textContent = `${results.length} resultado${results.length === 1 ? "" : "s"}`;
     renderProviders(sortProviders(results));
   } catch (error) {
     console.error(error);
@@ -1061,68 +1118,81 @@ function bindLogin() {
       return;
     }
 
+    const submitBtn = $("formLogin")?.querySelector('button[type="submit"]');
     const email = $("loginEmail").value.trim();
     const password = $("loginPassword").value;
-   
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (error) {
-      showAlert(error.message, "error");
-      return;
-    }
-
-    state.currentUser = data.user || null;
-
-    try {
-      await ensureProviderProfileForCurrentUser();
-    } catch (profileError) {
-      console.error(profileError);
-      showAlert(profileError.message || "Erro ao finalizar o perfil de prestador.", "error");
-    }
-
-    await loadMyProvider();
-    refreshAuthUI();
-
-    if (isAdminUser()) {
-      navigate("admin");
-      showAlert("Login administrativo realizado com sucesso.", "success");
-      return;
-    }
-
-    navigate("dashboard");
-
-    if (state.currentProviderProfile) {
-      showAlert("Login realizado com sucesso.", "success");
-    } else {
-      showAlert("Login realizado, mas seu perfil de prestador ainda não foi encontrado.", "info");
-    }
-  });
-
-  $("btnForgotPassword")?.addEventListener("click", async () => {
-    const email = $("loginEmail").value.trim();
 
     if (!isValidEmail(email)) {
-      showAlert("Digite seu email antes de usar a recuperação de senha.", "error");
+      showAlert("Digite um e-mail válido.", "error");
+      return;
+    }
+
+    if (!password) {
+      showAlert("Digite sua senha.", "error");
       return;
     }
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin
+      setButtonLoading(submitBtn, true, "Entrando...");
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       });
 
       if (error) throw error;
 
-      showAlert("Enviamos o link de recuperação para seu email.", "success");
+      state.currentUser = data.user || null;
+      state.isPasswordRecoveryMode = false;
+      updatePasswordRecoveryUI();
+
+      await loadMyProvider(true);
+      refreshAuthUI();
+      redirectAfterAuth({ silent: false });
     } catch (error) {
-      showAlert(error.message || "Erro ao enviar email de recuperação.", "error");
+      console.error(error);
+      showAlert(mapAuthErrorMessage(error), "error");
+    } finally {
+      setButtonLoading(submitBtn, false);
     }
   });
 
+  $("btnForgotPassword")?.addEventListener("click", async () => {
+    if (!supabase) {
+      showAlert("Supabase não configurado corretamente.", "error");
+      return;
+    }
+
+    const email = $("loginEmail").value.trim();
+    const button = $("btnForgotPassword");
+
+    if (!isValidEmail(email)) {
+      showAlert("Digite seu e-mail antes de solicitar a recuperação de senha.", "error");
+      return;
+    }
+
+    try {
+      setButtonLoading(button, true, "Enviando link...");
+
+      const redirectUrl = `${window.location.origin}${window.location.pathname}`;
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl
+      });
+
+      if (error) throw error;
+
+      showAlert(
+        "Enviamos o link de recuperação para seu e-mail. Abra a mensagem e clique no link para definir uma nova senha.",
+        "success"
+      );
+    } catch (error) {
+      console.error(error);
+      showAlert(mapAuthErrorMessage(error), "error");
+    } finally {
+      setButtonLoading(button, false);
+    }
+  });
 }
 
 function isValidEmail(value) {
@@ -1225,7 +1295,11 @@ function bindRegister() {
       return;
     }
 
-          try {
+          const submitBtn = $("formRegister")?.querySelector('button[type="submit"]');
+
+    try {
+      setButtonLoading(submitBtn, true, "Criando conta...");
+
       const { count, error: countError } = await supabase
         .from("prestadores")
         .select("*", { count: "exact", head: true });
@@ -1277,12 +1351,11 @@ function bindRegister() {
       const user = authData.user || null;
       const session = authData.session || null;
 
-      state.currentUser = user;
+      state.currentUser = session?.user || null;
       refreshAuthUI();
 
       if (session?.user?.id) {
         await savePendingProviderProfileInAuthMetadata(pendingProfile);
-        await ensureProviderProfileForCurrentUser();
         await loadMyProvider(true);
       } else {
         state.currentProviderProfile = null;
@@ -1295,23 +1368,25 @@ function bindRegister() {
       await fetchProviders();
       updateDashboardUI();
 
-      if (state.currentProviderProfile) {
+      if (session?.user?.id && state.currentProviderProfile) {
         navigate("dashboard");
-        showAlert("Cadastro concluído com sucesso.", "success");
+        showAlert("Cadastro concluído com sucesso. Sua conta já entrou automaticamente.", "success");
       } else {
         navigate("login");
         showAlert(
-          "Conta criada com sucesso. Confirme seu e-mail no link enviado e, depois disso, entre normalmente. Quando a sessão for reconhecida, você será levado ao dashboard.",
+          "Conta criada com sucesso. Agora confirme seu e-mail no link enviado para sua caixa de entrada. Depois disso, ao entrar, você será levado direto ao dashboard.",
           "success"
         );
       }
     } catch (error) {
       console.error(error);
       showAlert(
-        error.message ||
-          "Erro ao cadastrar prestador. Revise o RLS da tabela prestadores e tente novamente.",
+        mapAuthErrorMessage(error) ||
+        "Erro ao cadastrar prestador. Revise o RLS da tabela prestadores e tente novamente.",
         "error"
       );
+    } finally {
+      setButtonLoading(submitBtn, false);
     }
   });
 }
@@ -1347,6 +1422,11 @@ function setProfileEditMode(isEditing) {
   $("btnSaveProfile")?.classList.toggle("hidden", !isEditing);
   $("btnCancelEditProfile")?.classList.toggle("hidden", !isEditing);
   $("btnToggleEditProfile")?.classList.toggle("hidden", isEditing || !state.currentProviderProfile);
+
+  const profileServiceHint = $("profileServiceHint");
+  if (profileServiceHint) {
+    profileServiceHint.classList.toggle("hidden", !isEditing);
+  }
 }
 
 function bindDashboard() {
@@ -1358,47 +1438,67 @@ function bindDashboard() {
 
     state.profileDraftBackup = {
       nome: $("profileName").value,
-      whatsapp: normalizeWhatsappBR($("profileWhatsapp").value),
-      servico: $("profileService").value,
+      whatsapp: $("profileWhatsapp").value,
+      servicos: $("profileService").value,
       experiencia_anos: $("profileExperience").value,
       preco_medio: $("profilePrice").value,
       raio_km: $("profileRadius").value,
       descricao: $("profileDescription").value,
-      atende_emergencia: $("profileEmergency").checked
+      atende_emergencia: $("profileEmergency").checked,
+      latitude: state.currentProviderProfile.latitude,
+      longitude: state.currentProviderProfile.longitude
     };
 
     setProfileEditMode(true);
   });
 
   $("btnCancelEditProfile")?.addEventListener("click", () => {
-    if (state.profileDraftBackup) {
-      $("profileName").value = state.profileDraftBackup.nome || "";
-      $("profileWhatsapp").value = state.profileDraftBackup.whatsapp || "";
-      $("profileService").value = state.profileDraftBackup.servico || "";
-      $("profileExperience").value = state.profileDraftBackup.experiencia_anos || "";
-      $("profilePrice").value = state.profileDraftBackup.preco_medio || "";
-      $("profileRadius").value = state.profileDraftBackup.raio_km || "10";
-      $("profileDescription").value = state.profileDraftBackup.descricao || "";
-      $("profileEmergency").checked = !!state.profileDraftBackup.atende_emergencia;
+    const backup = state.profileDraftBackup;
+
+    if (!backup) {
+      setProfileEditMode(false);
+      return;
+    }
+
+    $("profileName").value = backup.nome || "";
+    $("profileWhatsapp").value = backup.whatsapp || "";
+    $("profileService").value = backup.servicos || "";
+    $("profileExperience").value = backup.experiencia_anos || 0;
+    $("profilePrice").value = backup.preco_medio || 0;
+    $("profileRadius").value = String(backup.raio_km || 10);
+    $("profileDescription").value = backup.descricao || "";
+    $("profileEmergency").checked = !!backup.atende_emergencia;
+
+    state.currentProviderProfile.latitude = backup.latitude;
+    state.currentProviderProfile.longitude = backup.longitude;
+
+    if (backup.latitude && backup.longitude) {
+      $("profileLocationText").textContent = formatCoords(backup.latitude, backup.longitude);
+    } else {
+      $("profileLocationText").textContent = "não definida";
     }
 
     state.profileDraftBackup = null;
     setProfileEditMode(false);
+    showAlert("Alterações descartadas.", "info");
   });
 
   $("btnProfileLocation")?.addEventListener("click", async () => {
-    if (!state.currentProviderProfile) {
-      showAlert("Faça login primeiro.", "error");
+    if (!state.isEditingProfile) {
+      showAlert("Ative a edição do perfil antes de atualizar a localização.", "error");
       return;
     }
 
     try {
       const coords = await getCurrentPosition();
+
       state.currentProviderProfile.latitude = coords.latitude;
       state.currentProviderProfile.longitude = coords.longitude;
+
       $("profileLocationText").textContent = formatCoords(coords.latitude, coords.longitude);
       showAlert("Localização atualizada.", "success");
     } catch (error) {
+      console.error(error);
       showAlert("Não foi possível atualizar a localização.", "error");
     }
   });
@@ -1411,40 +1511,72 @@ function bindDashboard() {
       return;
     }
 
+    const submitBtn = $("btnSaveProfile");
+
     const rawServices = normalizeServicesInput($("profileService").value);
+    const nome = $("profileName").value.trim();
+    const whatsapp = normalizeWhatsappBR($("profileWhatsapp").value);
+    const experiencia = Number($("profileExperience").value || 0);
+    const preco = Number($("profilePrice").value || 0);
+    const raio = Number($("profileRadius").value || 10);
+    const descricao = $("profileDescription").value.trim();
+
+    if (!nome) {
+      showAlert("Informe seu nome profissional.", "error");
+      return;
+    }
+
+    if (!whatsapp) {
+      showAlert("Digite um WhatsApp válido com DDD.", "error");
+      return;
+    }
 
     if (!rawServices.length) {
       showAlert("Informe pelo menos um serviço.", "error");
       return;
     }
 
-    const updated = {
-      nome: $("profileName").value.trim(),
-      whatsapp: normalizeWhatsappBR($("profileWhatsapp").value),
-      servicos: rawServices,
-      servico: rawServices[0],
-      experiencia_anos: Number($("profileExperience").value || 0),
-      preco_medio: Number($("profilePrice").value || 0),
-      raio_km: Number($("profileRadius").value || 10),
-      descricao: $("profileDescription").value.trim(),
-      atende_emergencia: $("profileEmergency").checked,
-      latitude: Number(state.currentProviderProfile.latitude),
-      longitude: Number(state.currentProviderProfile.longitude),
-      location: `POINT(${Number(state.currentProviderProfile.longitude)} ${Number(
-        state.currentProviderProfile.latitude
-      )})`
-    };
-
-    if (!updated.whatsapp) {
-      showAlert("Digite um WhatsApp válido com DDD.", "error");
+    if (!Number.isFinite(experiencia) || experiencia < 0) {
+      showAlert("Informe anos de experiência válidos.", "error");
       return;
     }
 
+    if (!Number.isFinite(preco) || preco < 0) {
+      showAlert("Informe um preço médio válido.", "error");
+      return;
+    }
+
+    const lat = Number(state.currentProviderProfile.latitude);
+    const lng = Number(state.currentProviderProfile.longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      showAlert("Atualize sua localização antes de salvar o perfil.", "error");
+      return;
+    }
+
+    const updated = {
+      nome,
+      whatsapp,
+      servicos: rawServices,
+      servico: rawServices[0],
+      experiencia_anos: experiencia,
+      preco_medio: preco,
+      raio_km: raio,
+      descricao,
+      atende_emergencia: $("profileEmergency").checked,
+      latitude: lat,
+      longitude: lng,
+      location: `POINT(${lng} ${lat})`
+    };
+
     try {
+      setButtonLoading(submitBtn, true, "Salvando...");
+
       const { error } = await supabase
         .from("prestadores")
         .update(updated)
-        .eq("id", state.currentProviderProfile.id);
+        .eq("id", state.currentProviderProfile.id)
+        .eq("user_id", state.currentUser.id);
 
       if (error) throw error;
 
@@ -1457,18 +1589,20 @@ function bindDashboard() {
       if (idx >= 0) {
         state.providers[idx] = {
           ...state.providers[idx],
-          ...state.currentProviderProfile
+          ...updated
         };
       }
 
       renderProviders(sortProviders(state.providers));
-      state.profileDraftBackup = null;
       updateDashboardUI();
+      state.profileDraftBackup = null;
       setProfileEditMode(false);
       showAlert("Perfil salvo com sucesso.", "success");
     } catch (error) {
       console.error(error);
-      showAlert(error.message || "Erro ao salvar perfil.", "error");
+      showAlert(mapAuthErrorMessage(error) || "Erro ao salvar perfil.", "error");
+    } finally {
+      setButtonLoading(submitBtn, false);
     }
   });
 
@@ -1486,6 +1620,7 @@ function bindChangePassword() {
       return;
     }
 
+    const submitBtn = $("formChangePassword")?.querySelector('button[type="submit"]');
     const newPassword = $("newPassword").value;
     const confirmNewPassword = $("confirmNewPassword").value;
 
@@ -1500,6 +1635,8 @@ function bindChangePassword() {
     }
 
     try {
+      setButtonLoading(submitBtn, true, "Atualizando senha...");
+
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
@@ -1507,9 +1644,15 @@ function bindChangePassword() {
       if (error) throw error;
 
       $("formChangePassword").reset();
-      showAlert("Senha atualizada com sucesso.", "success");
+      state.isPasswordRecoveryMode = false;
+      updatePasswordRecoveryUI();
+
+      showAlert("Senha atualizada com sucesso. Sua conta já está pronta para uso.", "success");
     } catch (error) {
-      showAlert(error.message || "Erro ao atualizar senha.", "error");
+      console.error(error);
+      showAlert(mapAuthErrorMessage(error) || "Erro ao atualizar senha.", "error");
+    } finally {
+      setButtonLoading(submitBtn, false);
     }
   });
 }
@@ -1577,8 +1720,15 @@ function bindUrgent() {
       const coords = await getCurrentPosition();
       state.urgentLocation = coords;
       $("urgentLocationText").textContent = formatCoords(coords.latitude, coords.longitude);
+      $("urgentLocationHelp").textContent =
+        "Localização capturada com sucesso. Agora o sistema pode buscar prestadores próximos com mais precisão.";
       showAlert("Localização do chamado capturada.", "success");
     } catch (error) {
+      console.error(error);
+      state.urgentLocation = null;
+      $("urgentLocationText").textContent = "não definido";
+      $("urgentLocationHelp").textContent =
+        "Não foi possível capturar sua localização agora. Tente novamente em um local com melhor sinal ou recarregue a página antes de enviar.";
       showAlert("Não foi possível obter sua localização.", "error");
     }
   });
@@ -1599,8 +1749,10 @@ async function createUrgentCall() {
     return;
   }
 
+  const submitBtn = $("btnSubmitUrgent");
+
   if (!state.urgentLocation) {
-    showAlert("Defina a localização do chamado.", "error");
+    showAlert("Defina a localização do chamado antes de enviar.", "error");
     return;
   }
 
@@ -1614,8 +1766,6 @@ async function createUrgentCall() {
     showAlert("Espere 1 minuto antes de enviar outro chamado.", "error");
     return;
   }
-
-  localStorage.setItem("lastCallTime", Date.now());
 
   if (!servico || !clienteContato || !descricao) {
     showAlert("Preencha todos os campos do chamado.", "error");
@@ -1633,6 +1783,8 @@ async function createUrgentCall() {
   }
 
   try {
+    setButtonLoading(submitBtn, true, "Enviando chamado...");
+
     const { data: chamadoData, error: chamadoError } = await supabase
       .from("chamados")
       .insert({
@@ -1648,23 +1800,24 @@ async function createUrgentCall() {
       .select()
       .single();
 
-    if (chamadoError) {
-      throw chamadoError;
-    }
+    if (chamadoError) throw chamadoError;
 
     state.myUrgentCallId = chamadoData.id;
+    localStorage.setItem("lastCallTime", Date.now());
 
     let nearbyProviders = null;
 
-    const rpcResponse = await supabase.rpc("buscar_prestadores", {
-      user_lat: state.urgentLocation.latitude,
-      user_lng: state.urgentLocation.longitude,
-      raio_metros: 10000,
-      servico_busca: servico || null
-    });
+    if (typeof supabase.rpc === "function") {
+      const rpcResponse = await supabase.rpc("buscar_prestadores", {
+        user_lat: state.urgentLocation.latitude,
+        user_lng: state.urgentLocation.longitude,
+        raio_metros: 10000,
+        servico_busca: servico || null
+      });
 
-    if (!rpcResponse.error && Array.isArray(rpcResponse.data)) {
-      nearbyProviders = rpcResponse.data.filter(provider => provider.atende_emergencia);
+      if (!rpcResponse.error && Array.isArray(rpcResponse.data)) {
+        nearbyProviders = rpcResponse.data.filter(provider => provider.atende_emergencia);
+      }
     }
 
     if (!nearbyProviders) {
@@ -1673,9 +1826,7 @@ async function createUrgentCall() {
         .select("*")
         .eq("atende_emergencia", true);
 
-      if (providersError) {
-        throw providersError;
-      }
+      if (providersError) throw providersError;
 
       nearbyProviders = (providersData || []).filter(provider => {
         const serviceMatch = providerMatchesService(provider, servico);
@@ -1702,18 +1853,23 @@ async function createUrgentCall() {
         .from("chamados_destinatarios")
         .insert(destinatarios);
 
-      if (destinatariosError) {
-        throw destinatariosError;
-      }
+      if (destinatariosError) throw destinatariosError;
     }
 
     $("formUrgent").reset();
     $("urgentResponsesList").innerHTML = "";
+    $("urgentLocationText").textContent = "não definido";
+    $("urgentLocationHelp").textContent =
+      "Sua localização ajuda a encontrar prestadores próximos mais rápido. Se não funcionar, tente novamente em um local com GPS mais preciso.";
+    state.urgentLocation = null;
+
     showAlert("Chamado urgente enviado com sucesso.", "success");
     await loadMyUrgentResponses();
   } catch (error) {
     console.error(error);
     showAlert(error.message || "Erro ao enviar chamado urgente.", "error");
+  } finally {
+    setButtonLoading(submitBtn, false);
   }
 }
 
@@ -1736,58 +1892,31 @@ async function loadMyProvider(silent = false) {
     return;
   }
 
+  let profile = null;
+
   try {
-    await ensureProviderProfileForCurrentUser();
+    profile = await ensureProviderProfileForCurrentUser();
   } catch (profileError) {
     console.error(profileError);
     if (!silent) {
-      showAlert(profileError.message || "Erro ao finalizar seu perfil.", "error");
+      showAlert(mapAuthErrorMessage(profileError) || "Erro ao localizar seu perfil de prestador.", "error");
     }
   }
 
-  let profile = null;
-
-  const { data: byUserId, error: byUserIdError } = await supabase
-    .from("prestadores")
-    .select("*")
-    .eq("user_id", state.currentUser.id)
-    .maybeSingle();
-
-  if (byUserIdError) {
-    console.error(byUserIdError);
-    if (!silent) showAlert("Erro ao carregar seu perfil.", "error");
-    return;
-  }
-
-  profile = byUserId || null;
-
-  if (!profile && state.currentUser.email) {
-    const { data: byEmail, error: byEmailError } = await supabase
+  if (!profile) {
+    const { data: byUserId, error: byUserIdError } = await supabase
       .from("prestadores")
       .select("*")
-      .ilike("email", state.currentUser.email)
+      .eq("user_id", state.currentUser.id)
       .maybeSingle();
 
-    if (byEmailError) {
-      console.error(byEmailError);
+    if (byUserIdError) {
+      console.error(byUserIdError);
       if (!silent) showAlert("Erro ao carregar seu perfil.", "error");
       return;
     }
 
-    if (byEmail) {
-      profile = byEmail;
-
-      if (!byEmail.user_id) {
-        const { error: linkError } = await supabase
-          .from("prestadores")
-          .update({ user_id: state.currentUser.id })
-          .eq("id", byEmail.id);
-
-        if (!linkError) {
-          profile.user_id = state.currentUser.id;
-        }
-      }
-    }
+    profile = byUserId || null;
   }
 
   state.currentProviderProfile = profile;
@@ -1822,10 +1951,10 @@ function updateDashboardUI() {
     $("statViews").textContent = "0";
     $("statWhatsapp").textContent = "0";
     $("statRating").textContent = "0.0";
-    $("statPlan").textContent = logged ? "Sem perfil" : "Sem login";
+    $("statPlan").textContent = logged ? "Perfil em configuração" : "Sem login";
     $("planMessage").textContent = logged
-      ? "Sua conta está autenticada, mas o perfil de prestador ainda não foi criado ou encontrado."
-      : "Faça login para ver o status do plano.";
+      ? "Sua conta está autenticada. Assim que o perfil de prestador for localizado ou finalizado, o status do seu plano aparecerá aqui."
+      : "Faça login para ver o status do plano."
     $("providerUrgentCallsList").innerHTML = "";
 
     $("btnToggleEditProfile")?.classList.toggle("hidden", !profile);
@@ -1860,14 +1989,20 @@ function updateDashboardUI() {
 
   const boostAtivo = isBoostActive(profile);
 
-  $("statPlan").textContent = assinaturaAtiva ? "Assinatura ativa" : "Grátis / sem assinatura";
+
+      const promoLancamentoAtiva =
+    profile.assinatura_ate && new Date(profile.assinatura_ate) > now;
+
+  $("statPlan").textContent = assinaturaAtiva ? "Assinatura ativa" : (promoLancamentoAtiva ? "Promoção de lançamento" : "Plano gratuito");
 
   const partes = [];
 
   if (assinaturaAtiva) {
-    partes.push(`Assinatura ativa até ${formatDateTimeBR(profile.assinatura_ate)}`);
+    partes.push(`Assinatura ativa até ${formatDateTimeBR(profile.assinatura_ate)}.`);
+  } else if (promoLancamentoAtiva) {
+    partes.push(`Você está no período promocional gratuito até ${formatDateTimeBR(profile.assinatura_ate)}.`);
   } else {
-    partes.push("Sem assinatura ativa no momento.");
+    partes.push("Você está no plano gratuito no momento, sem assinatura ativa.");
   }
 
   if (boostAtivo) {
@@ -1887,6 +2022,7 @@ function updateDashboardUI() {
   if (!state.isEditingProfile) {
     setProfileEditMode(false);
   }
+  updatePasswordRecoveryUI();
 }
 
 function updateMissingProfileNotice() {
@@ -1960,7 +2096,7 @@ function renderProviderUrgentCalls(calls) {
 
   if (!calls.length) {
     container.innerHTML = `
-      <div class="card">
+      <div class="card urgent-empty-card">
         <h3>Nenhum chamado por enquanto</h3>
         <p class="muted">Quando surgirem chamados próximos da sua região, eles aparecerão aqui.</p>
       </div>
@@ -2071,7 +2207,7 @@ async function loadMyUrgentResponses() {
 
   if (!state.myUrgentCallId) {
     container.innerHTML = `
-      <div class="card">
+      <div class="card urgent-empty-card">
         <h3>Nenhum chamado enviado ainda</h3>
         <p class="muted">Envie um chamado urgente para ver respostas aqui.</p>
       </div>
@@ -2133,7 +2269,7 @@ function renderUrgentResponses(responses) {
 
     if (expirado) {
       container.innerHTML = `
-        <div class="card">
+        <div class="card urgent-empty-card">
           <h3>Chamado expirado</h3>
           <p class="muted">Nenhum prestador foi escolhido a tempo. Você pode criar um novo chamado.</p>
         </div>
@@ -2273,30 +2409,6 @@ async function processPaymentReturn() {
   }
 }
 
-async function processAuthReturn() {
-  const url = new URL(window.location.href);
-  const hasAuthParams =
-    url.hash.includes("access_token") ||
-    url.hash.includes("refresh_token") ||
-    url.searchParams.get("type") ||
-    url.searchParams.get("access_token");
-
-  if (!hasAuthParams) return;
-
-  const {
-    data: { session }
-  } = await supabase.auth.getSession();
-
-  if (session?.user) {
-    state.currentUser = session.user;
-    await loadMyProvider(true);
-    refreshAuthUI();
-    redirectAfterAuth();
-
-    window.history.replaceState({}, document.title, window.location.pathname);
-  }
-}
-
 function clearRealtimeChannels() {
   if (!supabase || !state.realtimeChannels.length) return;
 
@@ -2373,28 +2485,115 @@ function initRealtime() {
   state.realtimeChannels.push(channelUrgentCalls, channelResponses, channelStatus);
 }
 
-function redirectAfterAuth() {
+function redirectAfterAuth(options = {}) {
   if (!state.currentUser) return;
 
-  if (isAdminUser()) {
-    navigate("admin");
-    return;
-  }
+  const {
+    silent = false
+  } = options;
 
   navigate("dashboard");
 
+  if (silent) return;
+
   if (state.currentProviderProfile) {
-    showAlert("Você entrou com sucesso.", "success");
+    showAlert("Login realizado com sucesso. Você já está no dashboard.", "success");
   } else {
     showAlert(
-      "Sua conta foi confirmada e você entrou. Agora vamos finalizar ou localizar seu perfil de prestador.",
+      "Sua conta foi autenticada com sucesso. Estamos finalizando ou localizando seu perfil de prestador.",
       "info"
     );
   }
 }
 
+async function processAuthCallbackFromUrl() {
+  if (!supabase) return false;
+
+  const url = new URL(window.location.href);
+  const hash = window.location.hash ? window.location.hash.substring(1) : "";
+  const hashParams = new URLSearchParams(hash);
+  const queryParams = url.searchParams;
+
+  const hasHashTokens =
+    hashParams.has("access_token") ||
+    hashParams.has("refresh_token") ||
+    hashParams.has("type");
+
+  const hasQueryAuth =
+    queryParams.has("token_hash") ||
+    queryParams.has("type") ||
+    queryParams.has("code");
+
+  let handled = false;
+
+  try {
+    if (queryParams.has("code")) {
+      const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+      if (error) throw error;
+      handled = true;
+    } else if (queryParams.has("token_hash") && queryParams.has("type")) {
+      const type = queryParams.get("type");
+      const token_hash = queryParams.get("token_hash");
+
+      const { error } = await supabase.auth.verifyOtp({
+        type,
+        token_hash
+      });
+
+      if (error) throw error;
+      handled = true;
+
+      if (type === "recovery") {
+        state.isPasswordRecoveryMode = true;
+        navigate("dashboard");
+        updatePasswordRecoveryUI();
+        showAlert("Link de recuperação validado. Agora defina sua nova senha no painel.", "success");
+      } else {
+        state.isPasswordRecoveryMode = false;
+        updatePasswordRecoveryUI();
+        navigate("dashboard");
+        showAlert("E-mail confirmado com sucesso. Sua conta já foi autenticada.", "success");
+      }
+    } else if (hasHashTokens) {
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        handled = true;
+
+        const authType = hashParams.get("type");
+
+        if (authType === "recovery") {
+          state.isPasswordRecoveryMode = true;
+          navigate("dashboard");
+          updatePasswordRecoveryUI();
+          showAlert("Link de recuperação validado. Agora defina sua nova senha no painel.", "success");
+        } else {
+          state.isPasswordRecoveryMode = false;
+          updatePasswordRecoveryUI();
+          navigate("dashboard");
+          showAlert("E-mail confirmado com sucesso. Sua conta já foi autenticada.", "success");
+        }
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    showAlert(mapAuthErrorMessage(error), "error");
+    handled = true;
+  }
+
+  if (handled || hasQueryAuth || hasHashTokens) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
+  return handled;
+}
+
 async function restoreSession() {
   if (!supabase) return;
+
+  await processAuthCallbackFromUrl();
 
   const {
     data: { session }
@@ -2412,20 +2611,52 @@ async function restoreSession() {
       currentScreen === "screen-login" || currentScreen === "screen-register";
 
     if (isAuthScreen || state.currentRoute === "login" || state.currentRoute === "register") {
-      redirectAfterAuth();
+      redirectAfterAuth({ silent: true });
     }
+  } else {
+    state.currentProviderProfile = null;
+    state.isEditingProfile = false;
+    state.profileDraftBackup = null;
+    state.providerUrgentCalls = [];
+    state.myUrgentResponses = [];
+    state.myUrgentCallId = null;
+    updateDashboardUI();
+    clearRealtimeChannels();
   }
 
   supabase.auth.onAuthStateChange(async (event, sessionNow) => {
     state.currentUser = sessionNow?.user || null;
     refreshAuthUI();
 
+    state.isPasswordRecoveryMode = false;
+    updatePasswordRecoveryUI();
+
     if (state.currentUser) {
       await loadMyProvider(true);
       initRealtime();
 
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-        redirectAfterAuth();
+      if (event === "SIGNED_IN") {
+        redirectAfterAuth({ silent: false });
+        return;
+      }
+
+      if (event === "TOKEN_REFRESHED") {
+        updateDashboardUI();
+        return;
+      }
+
+      if (event === "USER_UPDATED") {
+        await loadMyProvider(true);
+        updateDashboardUI();
+        return;
+      }
+
+      if (event === "PASSWORD_RECOVERY") {
+        state.isPasswordRecoveryMode = true;
+        navigate("dashboard");
+        updatePasswordRecoveryUI();
+        showAlert("Link de recuperação validado. Agora defina sua nova senha no painel.", "success");
+        return;
       }
     } else {
       state.currentProviderProfile = null;
@@ -2442,50 +2673,94 @@ async function restoreSession() {
 
 
 async function loadPublicProfile() {
+  if (!supabase) return;
+
   const url = new URL(window.location.href);
   const prestadorId = url.searchParams.get("prestador");
+  const container = $("publicProfileContainer");
 
-  if (!prestadorId) return;
+  if (!container) return;
+
+  if (!prestadorId) {
+    container.innerHTML = "";
+    return;
+  }
 
   const { data, error } = await supabase
     .from("prestadores")
     .select("*")
     .eq("id", prestadorId)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
-    showAlert("Perfil público não encontrado.", "error");
+  if (error || !data || data.bloqueado) {
+    container.innerHTML = `
+      <div class="card">
+        <h3>Perfil não encontrado</h3>
+        <p class="muted">Este prestador não está disponível no momento.</p>
+      </div>
+    `;
+    navigate("provider-profile");
     return;
   }
 
-  $("providersList").innerHTML = `
-    <div class="card">
-      <h3>${escapeHtml(data.nome || "Prestador")}</h3>
-      <p class="muted">${escapeHtml(getProviderServices(data).join(", ") || "Serviço não informado")}</p>
-      <p>${escapeHtml(data.descricao || "Sem descrição cadastrada.")}</p>
+  const services = getProviderServices(data);
+  const whatsappLink = toWhatsappLink(
+    data.whatsapp,
+    `Olá ${data.nome || ""}, encontrei seu perfil no seufaztudo e gostaria de solicitar um orçamento.`
+  );
 
-      <div class="provider-meta">
-        <span class="meta-pill">${Number(data.experiencia_anos || 0)} anos de experiência</span>
-        <span class="meta-pill">${formatCurrency(data.preco_medio)}</span>
-        <span class="meta-pill">⭐ ${Number(data.avaliacao_media || 0).toFixed(1)}</span>
-        <span class="meta-pill">Atende até ${Number(data.raio_km || 0)} km</span>
+  container.innerHTML = `
+    <article class="public-profile-card">
+      <div class="public-profile-header">
+        <div>
+          <span class="tag">Prestador verificado na plataforma</span>
+          <h2>${escapeHtml(data.nome || "Prestador")}</h2>
+          <p class="public-profile-services">${escapeHtml(services.join(", ") || "Serviço não informado")}</p>
+        </div>
       </div>
 
-      <div class="provider-actions">
-        <a class="btn btn-whatsapp" target="_blank" rel="noopener noreferrer"
-           href="${toWhatsappLink(
-             data.whatsapp,
-             `Olá ${data.nome || ""}, encontrei seu perfil no seufaztudo e gostaria de solicitar um orçamento.`
-           )}">
-          Falar no WhatsApp
-        </a>
+      <div class="public-profile-grid">
+        <div class="card">
+          <h3>Sobre o profissional</h3>
+          <p>${escapeHtml(data.descricao || "Sem descrição cadastrada.")}</p>
+        </div>
+
+        <div class="card">
+          <h3>Informações</h3>
+          <div class="provider-meta">
+            <span class="meta-pill">${Number(data.experiencia_anos || 0)} anos de experiência</span>
+            <span class="meta-pill">${formatCurrency(data.preco_medio)}</span>
+            <span class="meta-pill">⭐ ${Number(data.avaliacao_media || 0).toFixed(1)}</span>
+            <span class="meta-pill">Atende até ${Number(data.raio_km || 0)} km</span>
+            ${data.atende_emergencia ? `<span class="meta-pill">Atende emergência</span>` : ""}
+          </div>
+        </div>
       </div>
-    </div>
+
+      <div class="card">
+        <h3>Contato</h3>
+        <p class="muted">Fale diretamente com o prestador para combinar orçamento, prazo e detalhes do serviço.</p>
+
+        <div class="provider-actions">
+          ${
+            whatsappLink
+              ? `<a id="publicProfileWhatsappBtn" class="btn btn-whatsapp" target="_blank" rel="noopener noreferrer" href="${whatsappLink}">Falar no WhatsApp</a>`
+              : `<button class="btn btn-secondary" type="button" disabled>WhatsApp não informado</button>`
+          }
+        </div>
+      </div>
+    </article>
   `;
 
-  $("resultsCount").textContent = "1 resultado";
-}
+  const publicWhatsappBtn = $("publicProfileWhatsappBtn");
+  if (publicWhatsappBtn) {
+    publicWhatsappBtn.addEventListener("click", async () => {
+      await incrementWhatsappClicks(data.id);
+    });
+  }
 
+  navigate("provider-profile");
+}
 
 async function avaliarPrestador(prestadorId) {
   const notaTexto = prompt("Dê uma nota de 1 a 5:");
@@ -2553,7 +2828,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindUrgent();
   bindPayments();
 
-  bindAdmin();
+  bindPublicProfile();
 
   bindChangePassword();
   setupPasswordToggles();
@@ -2564,10 +2839,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupServiceAutocomplete("urgentService", "urgentServiceSuggestions", "urgentServiceHint");
 
   await restoreSession();
-  await processAuthReturn();
+  fetchProviders();
   initRealtime();
   processPaymentReturn();
-  loadPublicProfile();
+
+  await loadPublicProfile();
+
+  renderSearchEmptyState("initial");
 
   const footerYear = document.getElementById("footerYear");
 if (footerYear) {
