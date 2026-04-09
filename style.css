@@ -20,6 +20,16 @@
 
   --shadow: 0 10px 30px rgba(0,0,0,0.08);
   --radius: 16px;
+
+  --topbar-offset: 108px;
+}
+
+html {
+  scroll-padding-top: calc(var(--topbar-offset) + 16px);
+}
+
+body {
+  padding-top: var(--topbar-offset);
 }
 
 * {
@@ -32,14 +42,6 @@ html, body {
   color: var(--text);
   font-family: 'Manrope', Arial, sans-serif;
   position: relative;
-}
-
-html {
-  scroll-padding-top: 120px;
-}
-
-body {
-  padding-top: 108px;
 }
 
 body::before {
@@ -91,7 +93,18 @@ button {
   align-items: center;
   gap: 16px;
   transform: translateY(0);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.04);
   transition: transform 0.28s ease, box-shadow 0.28s ease, background 0.28s ease;
+  will-change: transform;
+}
+
+body.topbar-hidden .topbar {
+  transform: translateY(-100%);
+}
+
+body.topbar-scrolled .topbar {
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.08);
 }
 
 .brand {
@@ -1039,8 +1052,8 @@ button {
 }
 
 @media (max-width: 820px) {
-  body {
-    padding-top: 132px;
+  :root {
+    --topbar-offset: 132px;
   }
 
   .topbar {

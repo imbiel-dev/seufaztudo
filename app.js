@@ -838,17 +838,17 @@ function navigate(route) {
     }
   }
 
-    requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    document.body.classList.remove("topbar-hidden");
+
     const topbar = document.querySelector(".topbar");
     const topbarHeight = topbar?.offsetHeight || 0;
-    const extraSpacing = 20;
+    const extraSpacing = 16;
     const targetTop = target ? target.getBoundingClientRect().top + window.scrollY : 0;
-
-    document.body.classList.remove("topbar-hidden");
 
     window.scrollTo({
       top: Math.max(targetTop - topbarHeight - extraSpacing, 0),
-      behavior: "smooth"
+      behavior: "instant"
     });
   });
 }
@@ -871,15 +871,15 @@ function setupTopbarScroll() {
   let ticking = false;
 
   function updateTopbar() {
-    const currentScrollY = window.scrollY;
-    const goingDown = currentScrollY > lastScrollY;
+    const currentScrollY = Math.max(window.scrollY, 0);
+    const scrollDelta = currentScrollY - lastScrollY;
     const passedThreshold = currentScrollY > 120;
 
     document.body.classList.toggle("topbar-scrolled", passedThreshold);
 
-    if (passedThreshold && goingDown && currentScrollY - lastScrollY > 6) {
+    if (passedThreshold && scrollDelta > 8) {
       document.body.classList.add("topbar-hidden");
-    } else if (!goingDown || currentScrollY <= 120) {
+    } else if (scrollDelta < -8 || currentScrollY <= 120) {
       document.body.classList.remove("topbar-hidden");
     }
 
@@ -893,6 +893,10 @@ function setupTopbarScroll() {
       ticking = true;
     }
   }, { passive: true });
+
+  window.addEventListener("resize", () => {
+    document.body.classList.remove("topbar-hidden");
+  });
 
   updateTopbar();
 }
