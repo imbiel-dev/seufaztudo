@@ -7,6 +7,11 @@ const state = {
   isPasswordRecoveryMode: false,
   profileDraftBackup: null,
 
+  registerAdditionalServices: [],
+  profileAdditionalServices: [],
+
+  publicRatingValue: 0,
+
   userLocation: null,
   providerRegisterLocation: null,
   urgentLocation: null,
@@ -27,83 +32,155 @@ const PUBLIC_RATING_STORAGE_KEY = "seufaztudo_public_ratings";
 
 const SERVICE_ALIASES = {
   "eletricista": "Eletricista",
+  "eletrica": "Eletricista",
+  "elétrica": "Eletricista",
   "encanador": "Encanador",
+  "encanamento": "Encanador",
   "bombeiro hidraulico": "Encanador",
   "bombeiro hidráulico": "Encanador",
+  "hidraulico": "Encanador",
+  "hidráulico": "Encanador",
   "pedreiro": "Pedreiro",
+  "alvenaria": "Pedreiro",
   "pintor": "Pintor",
+  "pintura": "Pintor",
   "diarista": "Diarista",
   "faxineira": "Diarista",
   "faxineiro": "Diarista",
+  "limpeza": "Diarista",
   "montador de moveis": "Montador de móveis",
   "montador de móveis": "Montador de móveis",
+  "montador": "Montador de móveis",
   "marceneiro": "Marceneiro",
   "chaveiro": "Chaveiro",
   "jardineiro": "Jardineiro",
+  "jardinagem": "Jardineiro",
   "vidraceiro": "Vidraceiro",
+  "vidraceiro/box": "Vidraceiro",
   "tecnico de informatica": "Técnico de informática",
   "técnico de informática": "Técnico de informática",
+  "informatica": "Técnico de informática",
+  "informática": "Técnico de informática",
+  "formatacao": "Técnico de informática",
+  "formatação": "Técnico de informática",
   "instalador de ar condicionado": "Instalador de ar-condicionado",
   "instalador de ar-condicionado": "Instalador de ar-condicionado",
+  "ar condicionado": "Instalador de ar-condicionado",
   "mecanico": "Mecânico",
   "mecânico": "Mecânico",
+  "mecanica": "Mecânico",
+  "mecânica": "Mecânico",
   "borracheiro": "Borracheiro",
   "motorista": "Motorista",
   "entregador": "Entregador",
+  "moto boy": "Entregador",
+  "motoboy": "Entregador",
+  "frete": "Freteiro",
+  "freteiro": "Freteiro",
+  "mudanca": "Freteiro",
+  "mudança": "Freteiro",
   "passeador de caes": "Passeador de cães",
   "passeador de cães": "Passeador de cães",
+  "dog walker": "Passeador de cães",
   "personal": "Personal trainer",
   "personal trainer": "Personal trainer",
+  "treinador": "Personal trainer",
   "baba": "Babá",
   "babá": "Babá",
   "cuidador de idosos": "Cuidador de idosos",
-  "freteiro": "Freteiro",
+  "cuidadora de idosos": "Cuidador de idosos",
   "serralheiro": "Serralheiro",
   "soldador": "Soldador",
   "gesseiro": "Gesseiro",
   "azulejista": "Azulejista",
+  "rejunte": "Azulejista",
   "tecnico em celular": "Técnico em celular",
   "técnico em celular": "Técnico em celular",
+  "conserto de celular": "Técnico em celular",
   "fotografo": "Fotógrafo",
   "fotógrafo": "Fotógrafo",
   "professor particular": "Professor particular",
+  "aulas particulares": "Professor particular",
   "manicure": "Manicure",
+  "pedicure": "Manicure",
   "cabeleireiro": "Cabeleireiro",
-  "maquiador": "Maquiador"
+  "barbeiro": "Barbeiro",
+  "maquiador": "Maquiador",
+  "maquiagem": "Maquiador",
+  "designer de sobrancelhas": "Designer de sobrancelhas",
+  "sobrancelha": "Designer de sobrancelhas",
+  "depiladora": "Depiladora",
+  "depilador": "Depiladora",
+  "lavador de sofa": "Lavagem de sofá",
+  "lavador de sofá": "Lavagem de sofá",
+  "lavagem de sofa": "Lavagem de sofá",
+  "lavagem de sofá": "Lavagem de sofá",
+  "dedetizador": "Dedetizador",
+  "dedetizacao": "Dedetizador",
+  "dedetização": "Dedetizador",
+  "desentupidor": "Desentupidor",
+  "desentupimento": "Desentupidor",
+  "instalador de camera": "Instalador de câmeras",
+  "instalador de câmera": "Instalador de câmeras",
+  "camera de seguranca": "Instalador de câmeras",
+  "câmera de segurança": "Instalador de câmeras",
+  "porteiro": "Porteiro",
+  "zelador": "Zelador",
+  "marido de aluguel": "Marido de aluguel",
+  "faz tudo": "Marido de aluguel",
+  "reformas": "Marido de aluguel",
+  "instalador de tv": "Instalador de TV",
+  "instalador de televisão": "Instalador de TV",
+  "tv": "Instalador de TV",
+  "limpeza pos obra": "Limpeza pós-obra",
+  "limpeza pós obra": "Limpeza pós-obra",
+  "limpeza pós-obra": "Limpeza pós-obra"
 };
 
 const SERVICE_OPTIONS = [
   "Eletricista",
   "Encanador",
+  "Desentupidor",
   "Pedreiro",
   "Pintor",
   "Diarista",
+  "Limpeza pós-obra",
   "Montador de móveis",
   "Marceneiro",
   "Chaveiro",
   "Jardineiro",
   "Vidraceiro",
   "Técnico de informática",
+  "Técnico em celular",
   "Instalador de ar-condicionado",
+  "Instalador de TV",
+  "Instalador de câmeras",
   "Mecânico",
   "Borracheiro",
   "Motorista",
   "Entregador",
+  "Freteiro",
   "Passeador de cães",
   "Personal trainer",
   "Babá",
   "Cuidador de idosos",
-  "Freteiro",
   "Serralheiro",
   "Soldador",
   "Gesseiro",
   "Azulejista",
-  "Técnico em celular",
   "Fotógrafo",
   "Professor particular",
   "Manicure",
   "Cabeleireiro",
-  "Maquiador"
+  "Barbeiro",
+  "Maquiador",
+  "Designer de sobrancelhas",
+  "Depiladora",
+  "Lavagem de sofá",
+  "Dedetizador",
+  "Porteiro",
+  "Zelador",
+  "Marido de aluguel"
 ];
 
 function normalizeText(value) {
@@ -160,6 +237,142 @@ function getProviderServices(provider) {
   }
 
   return [];
+}
+
+function sanitizeSingleService(value) {
+  const normalized = normalizeService(value);
+  return normalized ? safeTrim(normalized, 120) : "";
+}
+
+function buildProviderServices(primaryService, additionalServices = []) {
+  const primary = sanitizeSingleService(primaryService);
+  const extras = additionalServices
+    .map(sanitizeSingleService)
+    .filter(Boolean);
+
+  const merged = [primary, ...extras].filter(Boolean);
+  return merged.filter((service, index, arr) => arr.indexOf(service) === index);
+}
+
+function renderServiceTags(containerId, services, options = {}) {
+  const container = $(containerId);
+  if (!container) return;
+
+  const {
+    removable = false,
+    onRemove = null
+  } = options;
+
+  if (!services.length) {
+    container.innerHTML = `<span class="small-muted">Nenhum serviço adicional.</span>`;
+    return;
+  }
+
+  container.innerHTML = "";
+
+  services.forEach((service, index) => {
+    const tag = document.createElement("div");
+    tag.className = "service-tag";
+    tag.innerHTML = `
+      <span>${escapeHtml(service)}</span>
+      ${
+        removable
+          ? `<button type="button" class="service-tag-remove" data-remove-service-index="${index}">×</button>`
+          : ``
+      }
+    `;
+    container.appendChild(tag);
+  });
+
+  if (removable && typeof onRemove === "function") {
+    container.querySelectorAll("[data-remove-service-index]").forEach(button => {
+      button.addEventListener("click", () => {
+        const index = Number(button.getAttribute("data-remove-service-index"));
+        onRemove(index);
+      });
+    });
+  }
+}
+
+function addRegisterAdditionalService() {
+  const input = $("registerAdditionalService");
+  if (!input) return;
+
+  const value = sanitizeSingleService(input.value);
+  const primary = sanitizeSingleService($("registerService")?.value);
+
+  if (!value) {
+    showAlert("Digite um serviço válido para adicionar.", "error");
+    return;
+  }
+
+  if (value === primary || state.registerAdditionalServices.includes(value)) {
+    showAlert("Esse serviço já foi adicionado.", "info");
+    return;
+  }
+
+  state.registerAdditionalServices.push(value);
+  input.value = "";
+  $("registerAdditionalServiceSuggestions")?.classList.add("hidden");
+  renderServiceTags("registerServicesList", state.registerAdditionalServices, {
+    removable: true,
+    onRemove: index => {
+      state.registerAdditionalServices.splice(index, 1);
+      renderServiceTags("registerServicesList", state.registerAdditionalServices, {
+        removable: true,
+        onRemove: idx => {
+          state.registerAdditionalServices.splice(idx, 1);
+          renderServiceTags("registerServicesList", state.registerAdditionalServices, {
+            removable: true,
+            onRemove: arguments.callee
+          });
+        }
+      });
+    }
+  });
+}
+
+function renderRegisterServices() {
+  renderServiceTags("registerServicesList", state.registerAdditionalServices, {
+    removable: true,
+    onRemove: index => {
+      state.registerAdditionalServices.splice(index, 1);
+      renderRegisterServices();
+    }
+  });
+}
+
+function addProfileAdditionalService() {
+  const input = $("profileAdditionalService");
+  if (!input) return;
+
+  const value = sanitizeSingleService(input.value);
+  const primary = sanitizeSingleService($("profileService")?.value);
+
+  if (!value) {
+    showAlert("Digite um serviço válido para adicionar.", "error");
+    return;
+  }
+
+  if (value === primary || state.profileAdditionalServices.includes(value)) {
+    showAlert("Esse serviço já foi adicionado.", "info");
+    return;
+  }
+
+  state.profileAdditionalServices.push(value);
+  input.value = "";
+  $("profileAdditionalServiceSuggestions")?.classList.add("hidden");
+  renderProfileServices();
+}
+
+function renderProfileServices() {
+  renderServiceTags("profileServicesList", state.profileAdditionalServices, {
+    removable: state.isEditingProfile,
+    onRemove: index => {
+      state.profileAdditionalServices.splice(index, 1);
+      renderProfileServices();
+    }
+  });
 }
 
 function providerMatchesService(provider, serviceQuery) {
@@ -331,6 +544,26 @@ function markPublicRatedProvider(providerId, nota) {
   localStorage.setItem(PUBLIC_RATING_STORAGE_KEY, JSON.stringify(ratings));
 }
 
+function updatePublicRatingSelector() {
+  const buttons = document.querySelectorAll("[data-public-rating-value]");
+  if (!buttons.length) return;
+
+  buttons.forEach(button => {
+    const value = Number(button.getAttribute("data-public-rating-value"));
+    const isActive = value === state.publicRatingValue;
+
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+
+  const selectedText = $("publicRatingSelectedText");
+  if (selectedText) {
+    selectedText.textContent = state.publicRatingValue
+      ? `Nota selecionada: ${state.publicRatingValue}`
+      : "Selecione uma nota de 1 a 5";
+  }
+}
+
 async function savePendingProviderProfileInAuthMetadata(payload) {
   if (!supabase || !payload) return;
 
@@ -392,7 +625,6 @@ function sanitizeProviderInsertPayload(payload, userId) {
     raio_km: Number(payload?.raio_km || 0),
     latitude: Number(payload?.latitude),
     longitude: Number(payload?.longitude),
-    location: `POINT(${Number(payload?.longitude)} ${Number(payload?.latitude)})`,
     assinatura_ate: payload?.assinatura_ate || null,
     boost_ativo: !!payload?.boost_ativo,
     avaliacao_media: Number(payload?.avaliacao_media || 0),
@@ -607,15 +839,18 @@ function navigate(route) {
   }
 
     requestAnimationFrame(() => {
-      const topbar = document.querySelector(".topbar");
-      const targetTop = target ? target.getBoundingClientRect().top + window.scrollY : 0;
-      const offset = (topbar?.offsetHeight || 0) + 16;
+    const topbar = document.querySelector(".topbar");
+    const topbarHeight = topbar?.offsetHeight || 0;
+    const extraSpacing = 20;
+    const targetTop = target ? target.getBoundingClientRect().top + window.scrollY : 0;
 
-      window.scrollTo({
-        top: Math.max(targetTop - offset, 0),
-        behavior: "smooth"
-      });
+    document.body.classList.remove("topbar-hidden");
+
+    window.scrollTo({
+      top: Math.max(targetTop - topbarHeight - extraSpacing, 0),
+      behavior: "smooth"
     });
+  });
 }
 
 function refreshAuthUI() {
@@ -628,6 +863,39 @@ function refreshAuthUI() {
   document.querySelector('[data-route="register"]')?.classList.toggle("hidden", logged);
 }
 
+function setupTopbarScroll() {
+  const topbar = document.querySelector(".topbar");
+  if (!topbar) return;
+
+  let lastScrollY = window.scrollY;
+  let ticking = false;
+
+  function updateTopbar() {
+    const currentScrollY = window.scrollY;
+    const goingDown = currentScrollY > lastScrollY;
+    const passedThreshold = currentScrollY > 120;
+
+    document.body.classList.toggle("topbar-scrolled", passedThreshold);
+
+    if (passedThreshold && goingDown && currentScrollY - lastScrollY > 6) {
+      document.body.classList.add("topbar-hidden");
+    } else if (!goingDown || currentScrollY <= 120) {
+      document.body.classList.remove("topbar-hidden");
+    }
+
+    lastScrollY = currentScrollY;
+    ticking = false;
+  }
+
+  window.addEventListener("scroll", () => {
+    if (!ticking) {
+      window.requestAnimationFrame(updateTopbar);
+      ticking = true;
+    }
+  }, { passive: true });
+
+  updateTopbar();
+}
 
 function formatCoords(lat, lng) {
   return `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
@@ -644,6 +912,11 @@ function isBoostActive(provider) {
   if (!provider) return false;
   if (!provider.boost_ate) return !!provider.boost_ativo;
   return new Date(provider.boost_ate) > new Date();
+}
+
+function isLaunchPromoActive(provider) {
+  if (!provider?.assinatura_ate) return false;
+  return new Date(provider.assinatura_ate) > new Date();
 }
 
 function formatDateTimeBR(dateString) {
@@ -980,29 +1253,27 @@ function bindNavigation() {
     });
   });
 
-  $("btnLogout")?.addEventListener("click", async () => {
+    $("btnLogout")?.addEventListener("click", async () => {
     if (!supabase) return;
 
-    try {
-      const { error } = await supabase.auth.signOut({ scope: "local" });
+    const button = $("btnLogout");
 
+    try {
+      setButtonLoading(button, true, "Saindo...");
+
+      clearUserSessionState();
+      navigate("home");
+      renderSearchEmptyState("initial");
+
+      const { error } = await supabase.auth.signOut({ scope: "local" });
       if (error) throw error;
 
-      state.currentUser = null;
-      state.currentProviderProfile = null;
-      state.isEditingProfile = false;
-      state.profileDraftBackup = null;
-      state.providerUrgentCalls = [];
-      state.myUrgentResponses = [];
-      state.myUrgentCallId = null;
-
-      clearRealtimeChannels();
-      refreshAuthUI();
-      updateDashboardUI();
-      navigate("home");
       showAlert("Você saiu da conta.", "success");
     } catch (error) {
+      console.error(error);
       showAlert(error.message || "Erro ao sair da conta.", "error");
+    } finally {
+      setButtonLoading(button, false);
     }
   });
 }
@@ -1088,7 +1359,7 @@ async function handleSearchProviders() {
       }
     }
 
-    if (!results) {
+        if (!results) {
       const { data, error } = await supabase
         .from("prestadores")
         .select("*");
@@ -1101,7 +1372,11 @@ async function handleSearchProviders() {
         .map(provider => {
           let distanceKm = null;
 
-          if (state.userLocation) {
+          if (
+            state.userLocation &&
+            Number.isFinite(Number(provider.latitude)) &&
+            Number.isFinite(Number(provider.longitude))
+          ) {
             distanceKm = calculateDistanceKm(
               state.userLocation.latitude,
               state.userLocation.longitude,
@@ -1117,7 +1392,8 @@ async function handleSearchProviders() {
         })
         .filter(provider => {
           if (!state.userLocation) return true;
-          return typeof provider.distanceKm === "number" && provider.distanceKm <= radiusKm;
+          if (provider.distanceKm === null) return false;
+          return provider.distanceKm <= radiusKm;
         });
     }
 
@@ -1249,6 +1525,19 @@ function bindRegister() {
     }
   });
 
+    $("btnAddRegisterService")?.addEventListener("click", () => {
+    addRegisterAdditionalService();
+  });
+
+  $("registerAdditionalService")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addRegisterAdditionalService();
+    }
+  });
+
+  renderRegisterServices();
+
   $("formRegister")?.addEventListener("submit", async event => {
     event.preventDefault();
 
@@ -1262,7 +1551,8 @@ function bindRegister() {
       return;
     }
 
-    const rawServices = normalizeServicesInput($("registerService").value);
+    const primaryService = sanitizeSingleService($("registerService").value);
+    const allServices = buildProviderServices(primaryService, state.registerAdditionalServices);
 
     const payload = {
       nome: safeTrim($("registerName").value, 120),
@@ -1270,8 +1560,8 @@ function bindRegister() {
       password: $("registerPassword").value,
       passwordConfirm: $("registerPasswordConfirm").value,
       whatsapp: normalizeWhatsappBR($("registerWhatsapp").value),
-      servicos: rawServices,
-      servico: rawServices[0] || "",
+      servicos: allServices,
+      servico: primaryService,
       experiencia_anos: toPositiveNumber($("registerExperience").value),
       preco_medio: toPositiveNumber($("registerPrice").value),
       raio_km: toPositiveNumber($("registerRadius").value),
@@ -1389,6 +1679,9 @@ function bindRegister() {
       $("formRegister").reset();
       state.providerRegisterLocation = null;
       $("providerLocationText").textContent = "não definida";
+      state.registerAdditionalServices = [];
+      renderRegisterServices();
+    
 
       await fetchProviders();
       updateDashboardUI();
@@ -1444,6 +1737,21 @@ function setProfileEditMode(isEditing) {
     $("btnProfileLocation").disabled = !isEditing;
   }
 
+    if ($("profileAdditionalService")) {
+    $("profileAdditionalService").disabled = !isEditing;
+  }
+
+  if ($("btnAddProfileService")) {
+    $("btnAddProfileService").disabled = !isEditing;
+  }
+
+  const additionalHint = $("profileAdditionalServiceHint");
+  if (additionalHint) {
+    additionalHint.classList.toggle("hidden", !isEditing);
+  }
+
+  renderProfileServices();
+
   $("btnSaveProfile")?.classList.toggle("hidden", !isEditing);
   $("btnCancelEditProfile")?.classList.toggle("hidden", !isEditing);
   $("btnToggleEditProfile")?.classList.toggle("hidden", isEditing || !state.currentProviderProfile);
@@ -1455,6 +1763,22 @@ function setProfileEditMode(isEditing) {
 }
 
 function bindDashboard() {
+    $("btnAddProfileService")?.addEventListener("click", () => {
+    if (!state.isEditingProfile) {
+      showAlert("Ative a edição do perfil antes de adicionar serviços.", "error");
+      return;
+    }
+    addProfileAdditionalService();
+  });
+
+  $("profileAdditionalService")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (!state.isEditingProfile) return;
+      addProfileAdditionalService();
+    }
+  });
+  
   $("btnToggleEditProfile")?.addEventListener("click", () => {
     if (!state.currentProviderProfile) {
       showAlert("Seu perfil de prestador ainda não foi encontrado.", "error");
@@ -1464,7 +1788,8 @@ function bindDashboard() {
     state.profileDraftBackup = {
       nome: $("profileName").value,
       whatsapp: $("profileWhatsapp").value,
-      servicos: $("profileService").value,
+      servico_principal: $("profileService").value,
+      servicos_adicionais: [...state.profileAdditionalServices],
       experiencia_anos: $("profileExperience").value,
       preco_medio: $("profilePrice").value,
       raio_km: $("profileRadius").value,
@@ -1473,6 +1798,10 @@ function bindDashboard() {
       latitude: state.currentProviderProfile.latitude,
       longitude: state.currentProviderProfile.longitude
     };
+
+    const currentServices = getProviderServices(state.currentProviderProfile);
+    state.profileAdditionalServices = currentServices.slice(1);
+    renderProfileServices();
 
     setProfileEditMode(true);
   });
@@ -1487,7 +1816,11 @@ function bindDashboard() {
 
     $("profileName").value = backup.nome || "";
     $("profileWhatsapp").value = backup.whatsapp || "";
-    $("profileService").value = backup.servicos || "";
+    $("profileService").value = backup.servico_principal || "";
+    state.profileAdditionalServices = Array.isArray(backup.servicos_adicionais)
+      ? [...backup.servicos_adicionais]
+      : [];
+    renderProfileServices();
     $("profileExperience").value = backup.experiencia_anos || 0;
     $("profilePrice").value = backup.preco_medio || 0;
     $("profileRadius").value = String(backup.raio_km || 10);
@@ -1538,7 +1871,8 @@ function bindDashboard() {
 
     const submitBtn = $("btnSaveProfile");
 
-    const rawServices = normalizeServicesInput($("profileService").value);
+    const primaryService = sanitizeSingleService($("profileService").value);
+    const allServices = buildProviderServices(primaryService, state.profileAdditionalServices);
     const nome = $("profileName").value.trim();
     const whatsapp = normalizeWhatsappBR($("profileWhatsapp").value);
     const experiencia = Number($("profileExperience").value || 0);
@@ -1556,7 +1890,7 @@ function bindDashboard() {
       return;
     }
 
-    if (!rawServices.length) {
+    if (!allServices.length) {
       showAlert("Informe pelo menos um serviço.", "error");
       return;
     }
@@ -1582,8 +1916,8 @@ function bindDashboard() {
     const updated = {
       nome,
       whatsapp,
-      servicos: rawServices,
-      servico: rawServices[0],
+      servicos: allServices,
+      servico: primaryService,
       experiencia_anos: experiencia,
       preco_medio: preco,
       raio_km: raio,
@@ -1671,20 +2005,31 @@ function bindChangePassword() {
     try {
       setButtonLoading(submitBtn, true, "Atualizando senha...");
 
-      const { error } = await supabase.auth.updateUser({
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("TIMEOUT_CHANGE_PASSWORD")), 15000);
+      });
+
+      const updatePromise = supabase.auth.updateUser({
         password: newPassword
       });
 
-      if (error) throw error;
+      const result = await Promise.race([updatePromise, timeoutPromise]);
+
+      if (result?.error) throw result.error;
 
       $("formChangePassword").reset();
       state.isPasswordRecoveryMode = false;
       updatePasswordRecoveryUI();
 
-      showAlert("Senha atualizada com sucesso. Sua conta já está pronta para uso.", "success");
+      showAlert("Senha atualizada com sucesso.", "success");
     } catch (error) {
       console.error(error);
-      showAlert(mapAuthErrorMessage(error) || "Erro ao atualizar senha.", "error");
+
+      if (error.message === "TIMEOUT_CHANGE_PASSWORD") {
+        showAlert("A atualização de senha demorou demais para responder. Tente novamente.", "error");
+      } else {
+        showAlert(mapAuthErrorMessage(error) || "Erro ao atualizar senha.", "error");
+      }
     } finally {
       setButtonLoading(submitBtn, false);
     }
@@ -1697,13 +2042,111 @@ function bindPayments() {
   });
 
   $("btnBuySubscription")?.addEventListener("click", async () => {
+    if (!state.currentUser || !state.currentProviderProfile) {
+      showAlert("Faça login como prestador.", "error");
+      return;
+    }
+
+    if (isLaunchPromoActive(state.currentProviderProfile)) {
+      showAlert(
+        `Você ainda não precisa assinar agora. Seu perfil faz parte do período promocional gratuito até ${formatDateTimeBR(state.currentProviderProfile.assinatura_ate)}.`,
+        "info"
+      );
+      return;
+    }
+
     await startCheckout("assinatura");
   });
 
   $("btnRefreshPlan")?.addEventListener("click", async () => {
-    await loadMyProvider(true);
-    showAlert("Status do plano atualizado.", "success");
+    const button = $("btnRefreshPlan");
+
+    try {
+      setButtonLoading(button, true, "Atualizando...");
+
+      await loadMyProvider(true);
+      updateDashboardUI();
+
+      button.textContent = "Concluído";
+      showAlert("Status do plano atualizado.", "success");
+    } catch (error) {
+      console.error(error);
+      showAlert(error.message || "Erro ao atualizar status do plano.", "error");
+    } finally {
+      setTimeout(() => {
+        setButtonLoading(button, false);
+      }, 900);
+    }
   });
+}
+
+async function startCheckout(tipo) {
+  if (!state.currentUser || !state.currentProviderProfile) {
+    showAlert("Faça login como prestador.", "error");
+    return;
+  }
+
+  const button = tipo === "boost" ? $("btnBuyBoost") : $("btnBuySubscription");
+  const loadingText =
+    tipo === "boost" ? "Abrindo boost..." : "Abrindo assinatura...";
+
+  try {
+    setButtonLoading(button, true, loadingText);
+
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("Sessão inválida. Faça login novamente.");
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const response = await fetch("/api/create-checkout", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        tipo,
+        prestadorId: state.currentProviderProfile.id,
+        nomePrestador: state.currentProviderProfile.nome,
+        emailPrestador: state.currentUser.email
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data?.error || "Erro ao iniciar pagamento.");
+    }
+
+    if (!data.checkoutUrl) {
+      throw new Error("A URL do checkout não foi retornada.");
+    }
+
+    showAlert("Redirecionando para o checkout...", "info");
+    window.location.href = data.checkoutUrl;
+  } catch (error) {
+    console.error(error);
+
+    if (error.name === "AbortError") {
+      showAlert(
+        "O checkout demorou demais para responder. Verifique se a rota /api/create-checkout está publicada e funcionando.",
+        "error"
+      );
+    } else {
+      showAlert(error.message || "Erro ao iniciar pagamento.", "error");
+    }
+  } finally {
+    setButtonLoading(button, false);
+  }
 }
 
 function bindUrgent() {
@@ -1854,8 +2297,12 @@ async function createUrgentCall() {
       "Sua localização ajuda a encontrar prestadores próximos mais rápido. Se não funcionar, tente novamente em um local com GPS mais preciso.";
     state.urgentLocation = null;
 
-    showAlert("Chamado urgente enviado com sucesso.", "success");
+        showAlert("Chamado urgente enviado com sucesso.", "success");
     await loadMyUrgentResponses();
+
+    if (state.currentProviderProfile) {
+      await loadProviderUrgentCalls();
+    }
   } catch (error) {
     console.error(error);
     showAlert(error.message || "Erro ao enviar chamado urgente.", "error");
@@ -1957,7 +2404,10 @@ function updateDashboardUI() {
 
   $("profileName").value = profile.nome || "";
   $("profileWhatsapp").value = profile.whatsapp || "";
-  $("profileService").value = getProviderServices(profile).join(", ");
+  const profileServices = getProviderServices(profile);
+  $("profileService").value = profileServices[0] || "";
+  state.profileAdditionalServices = profileServices.slice(1);
+  renderProfileServices();
   $("profileExperience").value = Number(profile.experiencia_anos || 0);
   $("profilePrice").value = Number(profile.preco_medio || 0);
   $("profileRadius").value = String(profile.raio_km || 10);
@@ -1990,18 +2440,15 @@ function updateDashboardUI() {
 
   if (assinaturaAtiva) {
     partes.push(`Assinatura ativa até ${formatDateTimeBR(profile.assinatura_ate)}.`);
-  } else if (promoLancamentoAtiva) {
-    partes.push(`Você está no período promocional gratuito até ${formatDateTimeBR(profile.assinatura_ate)}.`);
-  } else {
+    } else if (promoLancamentoAtiva) {
+    partes.push(`Você está no período promocional gratuito até ${formatDateTimeBR(profile.assinatura_ate)}. Durante esse período, não é necessário contratar assinatura.`);} else {
     partes.push("Você está no plano gratuito no momento, sem assinatura ativa.");
   }
 
-  if (boostAtivo) {
-    partes.push(
-      `Boost ativo${profile.boost_ate ? ` até ${formatDateTimeBR(profile.boost_ate)}` : ""}.`
-    );
+    if (boostAtivo) {
+    partes.push(`Boost ativo${profile.boost_ate ? ` até ${formatDateTimeBR(profile.boost_ate)}` : ""}.`);
   } else {
-    partes.push("Boost inativo.");
+    partes.push("Boost inativo. Você pode ativar destaque por 7 dias quando quiser.");
   }
 
   $("planMessage").textContent = partes.join(" ");
@@ -2023,10 +2470,11 @@ function updateMissingProfileNotice() {
 
 async function loadProviderUrgentCalls() {
   const container = $("providerUrgentCallsList");
+  if (!container) return;
 
   if (!state.currentProviderProfile) {
     container.innerHTML = `
-      <div class="card">
+      <div class="card urgent-empty-card">
         <h3>Faça login</h3>
         <p class="muted">Entre como prestador para visualizar chamados urgentes.</p>
       </div>
@@ -2060,11 +2508,15 @@ async function loadProviderUrgentCalls() {
     return;
   }
 
-  state.providerUrgentCalls = (data || [])
-  .map(item => item.chamado)
-  .filter(Boolean);
+  const mergedCalls = (data || [])
+    .filter(item => item.chamado)
+    .map(item => ({
+      ...item.chamado,
+      destinatario_status: item.status,
+      destinatario_id: item.id
+    }));
 
-  for (const call of state.providerUrgentCalls) {
+  for (const call of mergedCalls) {
     if (call.status === "aberto" && call.expira_em && new Date(call.expira_em) <= new Date()) {
       await supabase
         .from("chamados")
@@ -2076,20 +2528,21 @@ async function loadProviderUrgentCalls() {
     }
   }
 
-  state.providerUrgentCalls = state.providerUrgentCalls.filter(call => call.status === "aberto");
-
+  state.providerUrgentCalls = mergedCalls.filter(call => call.status === "aberto");
   renderProviderUrgentCalls(state.providerUrgentCalls);
 }
 
 function renderProviderUrgentCalls(calls) {
   const container = $("providerUrgentCallsList");
+  if (!container) return;
+
   container.innerHTML = "";
 
   if (!calls.length) {
     container.innerHTML = `
       <div class="card urgent-empty-card">
         <h3>Nenhum chamado por enquanto</h3>
-        <p class="muted">Quando surgirem chamados próximos da sua região, eles aparecerão aqui.</p>
+        <p class="muted">Quando surgirem chamados próximos da sua região, eles aparecerão aqui automaticamente.</p>
       </div>
     `;
     return;
@@ -2099,8 +2552,9 @@ function renderProviderUrgentCalls(calls) {
     const article = document.createElement("article");
     article.className = "provider-card";
 
-    const chosen = call.prestador_escolhido_id === state.currentProviderProfile.id;
-    const closed = call.status === "fechado";
+    const chosen = call.prestador_escolhido_id === state.currentProviderProfile?.id;
+    const alreadyResponded =
+      call.destinatario_status === "respondido" || call.destinatario_status === "enviada";
 
     article.innerHTML = `
       <div class="provider-top">
@@ -2109,8 +2563,9 @@ function renderProviderUrgentCalls(calls) {
           <p class="provider-service">Contato: ${escapeHtml(call.cliente_contato || "não informado")}</p>
         </div>
         <div class="provider-badges">
-          ${closed ? `<span class="badge">Fechado</span>` : `<span class="badge badge-emergency">Aberto</span>`}
+          <span class="badge badge-emergency">Aberto</span>
           ${chosen ? `<span class="badge badge-boost">Você foi escolhido</span>` : ``}
+          ${alreadyResponded ? `<span class="badge">Respondido</span>` : ``}
         </div>
       </div>
 
@@ -2121,18 +2576,25 @@ function renderProviderUrgentCalls(calls) {
         <span class="meta-pill">Status: ${escapeHtml(call.status || "aberto")}</span>
       </div>
 
-      ${
-        closed
-          ? ``
-          : `
-          <div class="inline-form">
-            <textarea id="responseMessage-${call.id}" rows="3" placeholder="Ex: Posso atender em 20 minutos."></textarea>
-            <div class="actions">
-              <button class="btn" type="button" data-respond-call="${call.id}">Responder chamado</button>
-            </div>
-          </div>
-        `
-      }
+      <div class="inline-form urgent-response-form">
+        <textarea
+          id="responseMessage-${call.id}"
+          rows="3"
+          placeholder="Ex: Posso atender em 20 minutos."
+          ${alreadyResponded ? "disabled" : ""}
+        ></textarea>
+
+        <div class="actions">
+          <button
+            class="btn"
+            type="button"
+            data-respond-call="${call.id}"
+            ${alreadyResponded ? "disabled" : ""}
+          >
+            ${alreadyResponded ? "Resposta enviada" : "Responder chamado"}
+          </button>
+        </div>
+      </div>
     `;
 
     container.appendChild(article);
@@ -2142,20 +2604,19 @@ function renderProviderUrgentCalls(calls) {
     button.addEventListener("click", async () => {
       const chamadoId = button.getAttribute("data-respond-call");
       const textarea = $(`responseMessage-${chamadoId}`);
-      const mensagem = textarea.value.trim();
+      const mensagem = textarea?.value.trim() || "";
 
       if (!mensagem) {
         showAlert("Digite uma mensagem para responder o chamado.", "error");
         return;
       }
 
-      await respondToUrgentCall(chamadoId, mensagem);
-      textarea.value = "";
+      await respondToUrgentCall(chamadoId, mensagem, button, textarea);
     });
   });
 }
 
-async function respondToUrgentCall(chamadoId, mensagem) {
+async function respondToUrgentCall(chamadoId, mensagem, button = null, textarea = null) {
   const call = state.providerUrgentCalls.find(c => c.id === chamadoId);
 
   if (call && call.status === "fechado") {
@@ -2169,6 +2630,8 @@ async function respondToUrgentCall(chamadoId, mensagem) {
   }
 
   try {
+    setButtonLoading(button, true, "Enviando resposta...");
+
     const { error } = await supabase
       .from("chamado_respostas")
       .upsert(
@@ -2185,11 +2648,33 @@ async function respondToUrgentCall(chamadoId, mensagem) {
 
     if (error) throw error;
 
+    const { error: destinatarioError } = await supabase
+      .from("chamados_destinatarios")
+      .update({ status: "respondido" })
+      .eq("chamado_id", chamadoId)
+      .eq("prestador_id", state.currentProviderProfile.id);
+
+    if (destinatarioError) throw destinatarioError;
+
+    if (textarea) {
+      textarea.value = "";
+      textarea.disabled = true;
+    }
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Resposta enviada";
+    }
+
     showAlert("Resposta enviada com sucesso.", "success");
     await loadProviderUrgentCalls();
   } catch (error) {
     console.error(error);
     showAlert(error.message || "Erro ao responder chamado.", "error");
+  } finally {
+    if (button && button.textContent !== "Resposta enviada") {
+      setButtonLoading(button, false);
+    }
   }
 }
 
@@ -2246,33 +2731,35 @@ async function loadMyUrgentResponses() {
 
 function renderUrgentResponses(responses) {
   const container = $("urgentResponsesList");
+  if (!container) return;
+
   container.innerHTML = "";
 
   const expirado =
-  responses.length > 0 &&
-  responses[0].chamado?.status === "aberto" &&
-  responses[0].chamado?.expira_em &&
-  new Date(responses[0].chamado.expira_em) <= new Date();
+    responses.length > 0 &&
+    responses[0].chamado?.status === "aberto" &&
+    responses[0].chamado?.expira_em &&
+    new Date(responses[0].chamado.expira_em) <= new Date();
 
   const fechado =
     state.myUrgentCallId &&
     responses.some(response => response.chamado?.status === "fechado");
 
-    if (expirado) {
-      container.innerHTML = `
-        <div class="card urgent-empty-card">
-          <h3>Chamado expirado</h3>
-          <p class="muted">Nenhum prestador foi escolhido a tempo. Você pode criar um novo chamado.</p>
-        </div>
-      `;
-      return;
-    }
+  if (expirado) {
+    container.innerHTML = `
+      <div class="card urgent-empty-card">
+        <h3>Chamado expirado</h3>
+        <p class="muted">Nenhum prestador foi escolhido a tempo. Você pode criar um novo chamado.</p>
+      </div>
+    `;
+    return;
+  }
 
   if (!responses.length) {
     container.innerHTML = `
-      <div class="card">
+      <div class="card urgent-empty-card">
         <h3>Ainda sem respostas</h3>
-        <p class="muted">Assim que os prestadores responderem, elas aparecerão aqui.</p>
+        <p class="muted">Assim que os prestadores responderem, elas aparecerão aqui automaticamente.</p>
       </div>
     `;
     return;
@@ -2318,7 +2805,7 @@ function renderUrgentResponses(responses) {
         </a>
         ${
           fechado
-            ? ``
+            ? `<button class="btn btn-secondary" type="button" disabled>Chamado encerrado</button>`
             : `<button class="btn" type="button" data-choose-provider="${prestador?.id}">Escolher prestador</button>
                <button class="btn btn-secondary" type="button" data-rate-provider="${prestador?.id}">Avaliar</button>`
         }
@@ -2331,7 +2818,7 @@ function renderUrgentResponses(responses) {
   container.querySelectorAll("[data-choose-provider]").forEach(button => {
     button.addEventListener("click", async () => {
       const prestadorId = button.getAttribute("data-choose-provider");
-      await chooseUrgentProvider(prestadorId);
+      await chooseUrgentProvider(prestadorId, button);
     });
   });
 
@@ -2343,13 +2830,17 @@ function renderUrgentResponses(responses) {
   });
 }
 
-async function chooseUrgentProvider(prestadorId) {
+async function chooseUrgentProvider(prestadorId, button = null) {
   if (!state.myUrgentCallId) {
     showAlert("Nenhum chamado encontrado.", "error");
     return;
   }
 
   try {
+    if (button) {
+      setButtonLoading(button, true, "Escolhendo...");
+    }
+
     const { data: currentCall, error: currentError } = await supabase
       .from("chamados")
       .select("status")
@@ -2378,6 +2869,10 @@ async function chooseUrgentProvider(prestadorId) {
   } catch (error) {
     console.error(error);
     showAlert(error.message || "Erro ao escolher prestador.", "error");
+  } finally {
+    if (button) {
+      setButtonLoading(button, false);
+    }
   }
 }
 
@@ -2391,10 +2886,12 @@ async function processPaymentReturn() {
   if (pagamento === "sucesso") {
     showAlert(
       orderNsu
-        ? `Retorno do pagamento recebido. Pedido: ${orderNsu}. Agora clique em "Atualizar status" para confirmar no sistema.`
-        : `Retorno do pagamento recebido. Clique em "Atualizar status" para confirmar no sistema.`,
-      "info"
+        ? `Pagamento identificado com sucesso. Pedido: ${orderNsu}. Agora clique em "Atualizar status" para sincronizar seu plano no painel.`
+        : `Pagamento identificado com sucesso. Agora clique em "Atualizar status" para sincronizar seu plano no painel.`,
+      "success"
     );
+  } else if (pagamento === "cancelado") {
+    showAlert("O pagamento foi cancelado.", "info");
   } else {
     showAlert("Retorno do pagamento identificado.", "info");
   }
@@ -2410,25 +2907,47 @@ function clearRealtimeChannels() {
   state.realtimeChannels = [];
 }
 
+function clearUserSessionState() {
+  state.currentUser = null;
+  state.currentProviderProfile = null;
+  state.isEditingProfile = false;
+  state.isPasswordRecoveryMode = false;
+  state.profileDraftBackup = null;
+
+  state.providerUrgentCalls = [];
+  state.myUrgentResponses = [];
+  state.myUrgentCallId = null;
+  state.profileAdditionalServices = [];
+
+  clearRealtimeChannels();
+  refreshAuthUI();
+  updateDashboardUI();
+  updatePasswordRecoveryUI();
+}
+
 function initRealtime() {
   if (!supabase) return;
 
   clearRealtimeChannels();
 
-  const channelUrgentCalls = supabase
-    .channel("chamados-realtime")
+  const channelUrgentRecipients = supabase
+    .channel("chamados-destinatarios-realtime")
     .on(
       "postgres_changes",
       {
-        event: "INSERT",
+        event: "*",
         schema: "public",
         table: "chamados_destinatarios"
       },
       async payload => {
         if (!state.currentProviderProfile) return;
 
-        if (payload.new.prestador_id === state.currentProviderProfile.id) {
-          showAlert("Novo chamado urgente disponível!", "info");
+        const matchesProvider =
+          payload.new?.prestador_id === state.currentProviderProfile.id ||
+          payload.old?.prestador_id === state.currentProviderProfile.id;
+
+        if (matchesProvider) {
+          showAlert("Atualização em chamados urgentes recebida.", "info");
           await loadProviderUrgentCalls();
         }
       }
@@ -2440,15 +2959,19 @@ function initRealtime() {
     .on(
       "postgres_changes",
       {
-        event: "INSERT",
+        event: "*",
         schema: "public",
         table: "chamado_respostas"
       },
       async payload => {
         if (!state.myUrgentCallId) return;
 
-        if (payload.new.chamado_id === state.myUrgentCallId) {
-          showAlert("Um prestador respondeu seu chamado!", "success");
+        const matchesCall =
+          payload.new?.chamado_id === state.myUrgentCallId ||
+          payload.old?.chamado_id === state.myUrgentCallId;
+
+        if (matchesCall) {
+          showAlert("Atualização nas respostas do seu chamado.", "success");
           await loadMyUrgentResponses();
         }
       }
@@ -2460,20 +2983,29 @@ function initRealtime() {
     .on(
       "postgres_changes",
       {
-        event: "UPDATE",
+        event: "*",
         schema: "public",
         table: "chamados"
       },
       async payload => {
-        if (payload.new.id === state.myUrgentCallId && payload.new.status === "fechado") {
-          showAlert("Chamado finalizado.", "info");
+        const changedCallId = payload.new?.id || payload.old?.id;
+
+        if (changedCallId && changedCallId === state.myUrgentCallId) {
           await loadMyUrgentResponses();
+        }
+
+        if (state.currentProviderProfile) {
+          await loadProviderUrgentCalls();
         }
       }
     )
     .subscribe();
 
-  state.realtimeChannels.push(channelUrgentCalls, channelResponses, channelStatus);
+  state.realtimeChannels.push(
+    channelUrgentRecipients,
+    channelResponses,
+    channelStatus
+  );
 }
 
 function redirectAfterAuth(options = {}) {
@@ -2605,14 +3137,7 @@ async function restoreSession() {
       redirectAfterAuth({ silent: true });
     }
   } else {
-    state.currentProviderProfile = null;
-    state.isEditingProfile = false;
-    state.profileDraftBackup = null;
-    state.providerUrgentCalls = [];
-    state.myUrgentResponses = [];
-    state.myUrgentCallId = null;
-    updateDashboardUI();
-    clearRealtimeChannels();
+    clearUserSessionState();
   }
 
   supabase.auth.onAuthStateChange(async (event, sessionNow) => {
@@ -2650,14 +3175,7 @@ async function restoreSession() {
         return;
       }
     } else {
-      state.currentProviderProfile = null;
-      state.isEditingProfile = false;
-      state.profileDraftBackup = null;
-      state.providerUrgentCalls = [];
-      state.myUrgentResponses = [];
-      state.myUrgentCallId = null;
-      updateDashboardUI();
-      clearRealtimeChannels();
+      clearUserSessionState();
     }
   });
 }
@@ -2701,6 +3219,7 @@ async function loadPublicProfile() {
   );
 
   const alreadyRated = hasPublicRatedProvider(data.id);
+  state.publicRatingValue = 0;
 
   container.innerHTML = `
     <article class="public-profile-card">
@@ -2740,13 +3259,51 @@ async function loadPublicProfile() {
               ? `<a id="publicProfileWhatsappBtn" class="btn btn-whatsapp" target="_blank" rel="noopener noreferrer" href="${whatsappLink}">Falar no WhatsApp</a>`
               : `<button class="btn btn-secondary" type="button" disabled>WhatsApp não informado</button>`
           }
-
-          ${
-            alreadyRated
-              ? `<button class="btn btn-secondary" type="button" disabled>Você já avaliou</button>`
-              : `<button id="btnPublicRateProvider" class="btn btn-secondary" type="button">Avaliar prestador</button>`
-          }
         </div>
+      </div>
+
+      <div class="card public-rating-card">
+        <h3>Avaliação</h3>
+        <p class="muted">Escolha uma nota de 1 a 5 para este prestador.</p>
+
+        ${
+          alreadyRated
+            ? `
+              <div class="public-rating-locked">
+                <strong>Você já avaliou este prestador neste navegador.</strong>
+              </div>
+            `
+            : `
+              <div class="public-rating-selector" id="publicRatingSelector">
+                <button type="button" class="public-rating-option" data-public-rating-value="1" aria-pressed="false">
+                  <span class="public-rating-arrow">▸</span>
+                  <span>1</span>
+                </button>
+                <button type="button" class="public-rating-option" data-public-rating-value="2" aria-pressed="false">
+                  <span class="public-rating-arrow">▸</span>
+                  <span>2</span>
+                </button>
+                <button type="button" class="public-rating-option" data-public-rating-value="3" aria-pressed="false">
+                  <span class="public-rating-arrow">▸</span>
+                  <span>3</span>
+                </button>
+                <button type="button" class="public-rating-option" data-public-rating-value="4" aria-pressed="false">
+                  <span class="public-rating-arrow">▸</span>
+                  <span>4</span>
+                </button>
+                <button type="button" class="public-rating-option" data-public-rating-value="5" aria-pressed="false">
+                  <span class="public-rating-arrow">▸</span>
+                  <span>5</span>
+                </button>
+              </div>
+
+              <p id="publicRatingSelectedText" class="small-muted">Selecione uma nota de 1 a 5</p>
+
+              <div class="provider-actions">
+                <button id="btnSubmitPublicRating" class="btn btn-secondary" type="button">Enviar avaliação</button>
+              </div>
+            `
+        }
       </div>
     </article>
   `;
@@ -2758,10 +3315,23 @@ async function loadPublicProfile() {
     });
   }
 
-  const rateBtn = $("btnPublicRateProvider");
-  if (rateBtn) {
-    rateBtn.addEventListener("click", async () => {
-      await avaliarPrestador(data.id, { publicMode: true });
+  const ratingButtons = document.querySelectorAll("[data-public-rating-value]");
+  ratingButtons.forEach(button => {
+    button.addEventListener("click", () => {
+      state.publicRatingValue = Number(button.getAttribute("data-public-rating-value"));
+      updatePublicRatingSelector();
+    });
+  });
+
+  updatePublicRatingSelector();
+
+  const submitRatingBtn = $("btnSubmitPublicRating");
+  if (submitRatingBtn) {
+    submitRatingBtn.addEventListener("click", async () => {
+      await avaliarPrestador(data.id, {
+        publicMode: true,
+        notaDireta: state.publicRatingValue
+      });
       await loadPublicProfile();
     });
   }
@@ -2770,7 +3340,10 @@ async function loadPublicProfile() {
 }
 
 async function avaliarPrestador(prestadorId, options = {}) {
-  const { publicMode = false } = options;
+  const {
+    publicMode = false,
+    notaDireta = null
+  } = options;
 
   if (!prestadorId) {
     showAlert("Prestador inválido.", "error");
@@ -2782,13 +3355,16 @@ async function avaliarPrestador(prestadorId, options = {}) {
     return;
   }
 
-  const notaTexto = prompt("Dê uma nota de 1 a 5:");
-  if (notaTexto === null) return;
+  let nota = notaDireta;
 
-  const nota = Number(notaTexto);
+  if (!publicMode) {
+    const notaTexto = prompt("Dê uma nota de 1 a 5:");
+    if (notaTexto === null) return;
+    nota = Number(notaTexto);
+  }
 
   if (!Number.isInteger(nota) || nota < 1 || nota > 5) {
-    showAlert("Nota inválida. Use um número de 1 a 5.", "error");
+    showAlert("Selecione uma nota válida de 1 a 5.", "error");
     return;
   }
 
@@ -2829,8 +3405,19 @@ async function avaliarPrestador(prestadorId, options = {}) {
 
     if (updateRatingError) throw updateRatingError;
 
+    const providerInState = state.providers.find(provider => provider.id === prestadorId);
+    if (providerInState) {
+      providerInState.avaliacao_media = roundedMedia;
+    }
+
+    if (state.currentProviderProfile?.id === prestadorId) {
+      state.currentProviderProfile.avaliacao_media = roundedMedia;
+      $("statRating") && ($("statRating").textContent = roundedMedia.toFixed(1));
+    }
+
     if (publicMode) {
       markPublicRatedProvider(prestadorId, nota);
+      state.publicRatingValue = 0;
       showAlert("Avaliação enviada com sucesso.", "success");
       await fetchProviders();
       await loadPublicProfile();
@@ -2866,13 +3453,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindChangePassword();
   setupPasswordToggles();
 
+  setupTopbarScroll();
+
   setupServiceAutocomplete("searchService", "searchServiceSuggestions", "searchServiceHint");
   setupServiceAutocomplete("registerService", "registerServiceSuggestions", "registerServiceHint");
+  setupServiceAutocomplete("registerAdditionalService", "registerAdditionalServiceSuggestions", "registerAdditionalServiceHint");
   setupServiceAutocomplete("profileService", "profileServiceSuggestions", "profileServiceHint");
+  setupServiceAutocomplete("profileAdditionalService", "profileAdditionalServiceSuggestions", "profileAdditionalServiceHint");
   setupServiceAutocomplete("urgentService", "urgentServiceSuggestions", "urgentServiceHint");
-
+  
   await restoreSession();
-  initRealtime();
   processPaymentReturn();
 
   await loadPublicProfile();
