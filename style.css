@@ -645,9 +645,16 @@ button {
 }
 
 .footer {
-  margin-top: 28px;
-  padding: 24px 0 10px;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  width: min(1180px, calc(100% - 32px));
+  margin: 36px auto 24px;
+  padding: 22px 18px 18px;
+  border-top: 1px solid rgba(22, 49, 61, 0.10);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+  border-radius: 18px;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.05);
 }
 
 .footer-legal {
@@ -655,7 +662,7 @@ button {
 }
 
 .footer-legal p {
-  color: var(--muted);
+  color: #52606d;
   line-height: 1.65;
   margin-bottom: 8px;
 }
@@ -665,12 +672,16 @@ button {
   flex-wrap: wrap;
   gap: 14px;
   margin-bottom: 12px;
-  padding: 4px 8px;
+  padding: 0;
   border-radius: 8px;
 }
 
 .footer-links a:hover {
-  background: rgba(60,177,121,0.1);
+  background: rgba(60,177,121,0.10);
+}
+
+.footer .small-muted {
+  color: #52606d;
 }
 
 .autocomplete-field {
@@ -1104,6 +1115,18 @@ button {
 
   .inline-service-add .btn {
     width: 100%;
+  }
+}
+
+@media (max-width: 700px) {
+  .footer {
+    width: min(100% - 20px, 1180px);
+    margin: 28px auto 18px;
+    padding: 18px 14px 16px;
+  }
+
+  .footer-links {
+    gap: 10px;
   }
 }
 
