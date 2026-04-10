@@ -1164,7 +1164,7 @@ function renderProviders(list) {
       url.searchParams.set("prestador", provider.id);
       window.history.pushState({}, "", url);
 
-      await incrementProviderViews(provider.id);
+      await incrementProviderViews(provider.id, { silent: true });
       await loadPublicProfile();
     });
 
@@ -1270,7 +1270,10 @@ function bindNavigation() {
       renderSearchEmptyState("initial");
 
       const { error } = await supabase.auth.signOut({ scope: "local" });
-      if (error) throw error;
+      if (error) {
+        console.error("Erro ao inserir avaliação:", error);
+        throw error;
+      }
 
       showAlert("Você saiu da conta.", "success");
     } catch (error) {
@@ -1368,7 +1371,10 @@ async function handleSearchProviders() {
         .from("prestadores")
         .select("*");
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro ao inserir avaliação:", error);
+        throw error;
+      }
 
       results = (data || [])
         .filter(provider => !provider.bloqueado)
@@ -1445,7 +1451,10 @@ function bindLogin() {
         password
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro ao inserir avaliação:", error);
+        throw error;
+      }
 
       state.currentUser = data.user || null;
       state.isPasswordRecoveryMode = false;
@@ -1485,7 +1494,10 @@ function bindLogin() {
         redirectTo: redirectUrl
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro ao inserir avaliação:", error);
+        throw error;
+      }
 
       showAlert(
         "Enviamos o link de recuperação para seu e-mail. Abra a mensagem e clique no link para definir uma nova senha.",
@@ -1625,12 +1637,13 @@ function bindRegister() {
 
       if (countError) throw countError;
 
-      const assinaturaAte =
-        Number(count || 0) < 500
-          ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
-          : null;
+      const promoLancamento = Number(count || 0) < 500;
+    const assinaturaAte =
+      promoLancamento
+        ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
+        : null;
 
-      const pendingProfile = {
+    const pendingProfile = {
         email: payload.email,
         nome: payload.nome,
         descricao: payload.descricao,
@@ -1644,6 +1657,7 @@ function bindRegister() {
         latitude: payload.latitude,
         longitude: payload.longitude,
         assinatura_ate: assinaturaAte,
+        promo_lancamento: promoLancamento,
         boost_ativo: false,
         avaliacao_media: 0,
         visualizacoes: 0,
@@ -1951,25 +1965,23 @@ function bindDashboard() {
 
       clearTimeout(timeout);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro ao inserir avaliação:", error);
+        throw error;
+      }
 
       state.currentProviderProfile = {
-        ...state.currentProviderProfile,
-        ...updated
-      };
+      ...state.currentProviderProfile,
+      ...updated
+    };
 
+    const idx = state.providers.findIndex(p => p.id === state.currentProviderProfile.id);
+    if (idx >= 0) {
       state.providers[idx] = {
         ...state.providers[idx],
         ...updated
       };
-
-      const idx = state.providers.findIndex(p => p.id === state.currentProviderProfile.id);
-      if (idx >= 0) {
-        state.providers[idx] = {
-          ...state.providers[idx],
-          ...updated
-        };
-      }
+    }
 
       state.profileDraftBackup = null;
       updateDashboardUI();
@@ -2071,24 +2083,40 @@ function bindPayments() {
     await startCheckout("assinatura");
   });
 
-  $("btnRefreshPlan")?.addEventListener("click", async () => {
+    $("btnRefreshPlan")?.addEventListener("click", async () => {
     const button = $("btnRefreshPlan");
 
     try {
       setButtonLoading(button, true, "Atualizando...");
 
-      await loadMyProvider(true);
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+
+      if (!session?.user?.id) {
+        throw new Error("Faça login novamente.");
+      }
+
+      const { data, error } = await supabase
+        .from("prestadores")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Erro ao inserir avaliação:", error);
+        throw error;
+      }
+
+      state.currentProviderProfile = data || null;
       updateDashboardUI();
 
-      button.textContent = "Concluído";
       showAlert("Status do plano atualizado.", "success");
     } catch (error) {
       console.error(error);
       showAlert(error.message || "Erro ao atualizar status do plano.", "error");
     } finally {
-      setTimeout(() => {
-        setButtonLoading(button, false);
-      }, 900);
+      setButtonLoading(button, false);
     }
   });
 }
@@ -2469,19 +2497,20 @@ function updateDashboardUI() {
   if (statRating) statRating.textContent = Number(profile.avaliacao_media || 0).toFixed(1);
 
   const now = new Date();
+  const acessoAtivo =
+  profile.assinatura_ate && new Date(profile.assinatura_ate) > now;
+
+  const promoLancamentoAtiva =
+    !!profile.promo_lancamento && acessoAtivo;
+
   const assinaturaAtiva =
-    profile.assinatura_ate && new Date(profile.assinatura_ate) > now;
+    !profile.promo_lancamento && acessoAtivo;
 
   const boostAtivo = isBoostActive(profile);
 
-  const promoLancamentoAtiva =
-    profile.assinatura_ate && new Date(profile.assinatura_ate) > now;
-
-  if (statPlan) {
-    statPlan.textContent = assinaturaAtiva
-      ? "Assinatura ativa"
-      : (promoLancamentoAtiva ? "Promoção de lançamento" : "Plano gratuito");
-  }
+  $("statPlan").textContent = assinaturaAtiva
+  ? "Assinatura ativa"
+  : (promoLancamentoAtiva ? "Promoção de lançamento" : "Plano gratuito");
 
   const partes = [];
 
@@ -2694,7 +2723,10 @@ async function respondToUrgentCall(chamadoId, mensagem, button = null, textarea 
         }
       );
 
-    if (error) throw error;
+    if (error) {
+      console.error("Erro ao inserir avaliação:", error);
+      throw error;
+    }
 
     const { error: destinatarioError } = await supabase
       .from("chamados_destinatarios")
@@ -2910,7 +2942,10 @@ async function chooseUrgentProvider(prestadorId, button = null) {
       })
       .eq("id", state.myUrgentCallId);
 
-    if (error) throw error;
+    if (error) {
+      console.error("Erro ao inserir avaliação:", error);
+      throw error;
+    }
 
     showAlert("Prestador escolhido com sucesso.", "success");
     await loadMyUrgentResponses();
@@ -3100,7 +3135,10 @@ async function processAuthCallbackFromUrl() {
   try {
     if (queryParams.has("code")) {
       const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-      if (error) throw error;
+      if (error) {
+        console.error("Erro ao inserir avaliação:", error);
+        throw error;
+      }
       handled = true;
     } else if (queryParams.has("token_hash") && queryParams.has("type")) {
       const type = queryParams.get("type");
@@ -3111,7 +3149,10 @@ async function processAuthCallbackFromUrl() {
         token_hash
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro ao inserir avaliação:", error);
+        throw error;
+      }
       handled = true;
 
       if (type === "recovery") {
@@ -3259,6 +3300,8 @@ async function loadPublicProfile() {
     navigate("provider-profile");
     return;
   }
+
+  await incrementProviderViews(data.id);
 
   const services = getProviderServices(data);
   const whatsappLink = toWhatsappLink(
