@@ -1147,7 +1147,7 @@ body.topbar-scrolled .topbar {
 
 @media (max-width: 560px) {
   :root {
-    --topbar-offset: 158px;
+    --topbar-offset: 300px;
   }
 
   .topnav .nav-btn {
