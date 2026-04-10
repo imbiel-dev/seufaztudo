@@ -53,8 +53,7 @@ body::before {
     linear-gradient(rgba(246, 243, 238, 0.78), rgba(246, 243, 238, 0.78)),
     url("img/map.png") center center / cover no-repeat;
   opacity: 1;
-  will-change: opacity, transform;
-  transform: translateZ(0);
+  z-index: 0;
 }
 
 h1, h2, h3, h4, p {
@@ -76,6 +75,17 @@ button {
 .container {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto 48px;
+}
+
+.container,
+.screen,
+.public-profile-container,
+.public-profile-card,
+.card,
+.provider-card,
+.footer {
+  position: relative;
+  z-index: 1;
 }
 
 .topbar {
@@ -244,7 +254,6 @@ body.topbar-scrolled .topbar {
 }
 
 .card:hover {
-  transform: translateY(-4px);
   box-shadow: 0 18px 40px rgba(0,0,0,0.08);
 }
 
@@ -313,8 +322,12 @@ body.topbar-scrolled .topbar {
 
 .stats-grid {
   grid-template-columns: minmax(280px, 1.35fr) repeat(4, minmax(140px, 1fr));
-  margin-bottom: 20px;
+  margin-bottom: 10px;
   align-items: stretch;
+}
+
+#screen-dashboard > .card {
+  margin-bottom: 14px;
 }
 
 .stat-card {

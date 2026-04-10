@@ -1783,24 +1783,28 @@ function bindDashboard() {
     }
   });
   
-  $("btnToggleEditProfile")?.addEventListener("click", () => {
-    if (!state.currentProviderProfile) {
-      showAlert("Seu perfil de prestador ainda não foi encontrado.", "error");
-      return;
-    }
+  $("btnToggleEditProfile")?.addEventListener("click", async () => {
+  if (!state.currentProviderProfile) {
+    await loadMyProvider(true);
+  }
+
+  if (!state.currentProviderProfile) {
+    showAlert("Seu perfil de prestador ainda não foi encontrado.", "error");
+    return;
+  }
 
     state.profileDraftBackup = {
-      nome: $("profileName").value,
-      whatsapp: $("profileWhatsapp").value,
-      servico_principal: $("profileService").value,
+      nome: $("profileName")?.value || "",
+      whatsapp: $("profileWhatsapp")?.value || "",
+      servico_principal: $("profileService")?.value || "",
       servicos_adicionais: [...state.profileAdditionalServices],
-      experiencia_anos: $("profileExperience").value,
-      preco_medio: $("profilePrice").value,
-      raio_km: $("profileRadius").value,
-      descricao: $("profileDescription").value,
-      atende_emergencia: $("profileEmergency").checked,
-      latitude: state.currentProviderProfile.latitude,
-      longitude: state.currentProviderProfile.longitude
+      experiencia_anos: $("profileExperience")?.value || "",
+      preco_medio: $("profilePrice")?.value || "",
+      raio_km: $("profileRadius")?.value || "",
+      descricao: $("profileDescription")?.value || "",
+      atende_emergencia: $("profileEmergency")?.checked || false,
+      latitude: state.currentProviderProfile?.latitude ?? null,
+      longitude: state.currentProviderProfile?.longitude ?? null
     };
 
     const currentServices = getProviderServices(state.currentProviderProfile);
@@ -1954,6 +1958,11 @@ function bindDashboard() {
         ...updated
       };
 
+      state.providers[idx] = {
+        ...state.providers[idx],
+        ...updated
+      };
+
       const idx = state.providers.findIndex(p => p.id === state.currentProviderProfile.id);
       if (idx >= 0) {
         state.providers[idx] = {
@@ -2085,8 +2094,17 @@ function bindPayments() {
 }
 
 async function startCheckout(tipo) {
-  if (!state.currentUser || !state.currentProviderProfile) {
+  if (!state.currentUser) {
     showAlert("Faça login como prestador.", "error");
+    return;
+  }
+
+  if (!state.currentProviderProfile) {
+    await loadMyProvider(true);
+  }
+
+  if (!state.currentProviderProfile) {
+    showAlert("Seu perfil de prestador ainda não foi carregado.", "error");
     return;
   }
 
@@ -2136,7 +2154,7 @@ async function startCheckout(tipo) {
     }
 
     showAlert("Redirecionando para o checkout...", "info");
-    window.location.href = data.checkoutUrl;
+    window.location.assign(data.checkoutUrl);
   } catch (error) {
     console.error(error);
 
@@ -2379,25 +2397,43 @@ function updateDashboardUI() {
   const profile = state.currentProviderProfile;
   const logged = !!state.currentUser;
 
-  if (!profile) {
-    $("profileName").value = "";
-    $("profileWhatsapp").value = "";
-    $("profileService").value = "";
-    $("profileExperience").value = "";
-    $("profilePrice").value = "";
-    $("profileRadius").value = "10";
-    $("profileDescription").value = "";
-    $("profileEmergency").checked = false;
-    $("profileLocationText").textContent = "não definida";
+  const profileName = $("profileName");
+  const profileWhatsapp = $("profileWhatsapp");
+  const profileService = $("profileService");
+  const profileExperience = $("profileExperience");
+  const profilePrice = $("profilePrice");
+  const profileRadius = $("profileRadius");
+  const profileDescription = $("profileDescription");
+  const profileEmergency = $("profileEmergency");
+  const profileLocationText = $("profileLocationText");
+  const statViews = $("statViews");
+  const statWhatsapp = $("statWhatsapp");
+  const statRating = $("statRating");
+  const statPlan = $("statPlan");
+  const planMessage = $("planMessage");
+  const providerUrgentCallsList = $("providerUrgentCallsList");
 
-    $("statViews").textContent = "0";
-    $("statWhatsapp").textContent = "0";
-    $("statRating").textContent = "0.0";
-    $("statPlan").textContent = logged ? "Perfil em configuração" : "Sem login";
-    $("planMessage").textContent = logged
-      ? "Sua conta está autenticada. Assim que o perfil de prestador for localizado ou finalizado, o status do seu plano aparecerá aqui."
-      : "Faça login para ver o status do plano."
-    $("providerUrgentCallsList").innerHTML = "";
+  if (!profile) {
+    if (profileName) profileName.value = "";
+    if (profileWhatsapp) profileWhatsapp.value = "";
+    if (profileService) profileService.value = "";
+    if (profileExperience) profileExperience.value = "";
+    if (profilePrice) profilePrice.value = "";
+    if (profileRadius) profileRadius.value = "10";
+    if (profileDescription) profileDescription.value = "";
+    if (profileEmergency) profileEmergency.checked = false;
+    if (profileLocationText) profileLocationText.textContent = "não definida";
+
+    if (statViews) statViews.textContent = "0";
+    if (statWhatsapp) statWhatsapp.textContent = "0";
+    if (statRating) statRating.textContent = "0.0";
+    if (statPlan) statPlan.textContent = logged ? "Perfil em configuração" : "Sem login";
+    if (planMessage) {
+      planMessage.textContent = logged
+        ? "Sua conta está autenticada. Assim que o perfil de prestador for localizado ou finalizado, o status do seu plano aparecerá aqui."
+        : "Faça login para ver o status do plano.";
+    }
+    if (providerUrgentCallsList) providerUrgentCallsList.innerHTML = "";
 
     $("btnToggleEditProfile")?.classList.toggle("hidden", !profile);
 
@@ -2406,27 +2442,31 @@ function updateDashboardUI() {
     return;
   }
 
-  $("profileName").value = profile.nome || "";
-  $("profileWhatsapp").value = profile.whatsapp || "";
+  if (profileName) profileName.value = profile.nome || "";
+  if (profileWhatsapp) profileWhatsapp.value = profile.whatsapp || "";
+
   const profileServices = getProviderServices(profile);
-  $("profileService").value = profileServices[0] || "";
+  if (profileService) profileService.value = profileServices[0] || profile.servico || "";
   state.profileAdditionalServices = profileServices.slice(1);
   renderProfileServices();
-  $("profileExperience").value = Number(profile.experiencia_anos || 0);
-  $("profilePrice").value = Number(profile.preco_medio || 0);
-  $("profileRadius").value = String(profile.raio_km || 10);
-  $("profileDescription").value = profile.descricao || "";
-  $("profileEmergency").checked = !!profile.atende_emergencia;
 
-  if (profile.latitude && profile.longitude) {
-    $("profileLocationText").textContent = formatCoords(profile.latitude, profile.longitude);
-  } else {
-    $("profileLocationText").textContent = "não definida";
+  if (profileExperience) profileExperience.value = profile.experiencia_anos ?? "";
+  if (profilePrice) profilePrice.value = profile.preco_medio ?? "";
+  if (profileRadius) profileRadius.value = profile.raio_km ?? "";
+  if (profileDescription) profileDescription.value = profile.descricao || "";
+  if (profileEmergency) profileEmergency.checked = !!profile.atende_emergencia;
+
+  if (profileLocationText) {
+    if (profile.latitude && profile.longitude) {
+      profileLocationText.textContent = formatCoords(profile.latitude, profile.longitude);
+    } else {
+      profileLocationText.textContent = "não definida";
+    }
   }
 
-  $("statViews").textContent = String(Number(profile.visualizacoes || 0));
-  $("statWhatsapp").textContent = String(Number(profile.cliques_whatsapp || 0));
-  $("statRating").textContent = Number(profile.avaliacao_media || 0).toFixed(1);
+  if (statViews) statViews.textContent = String(Number(profile.visualizacoes || 0));
+  if (statWhatsapp) statWhatsapp.textContent = String(Number(profile.cliques_whatsapp || 0));
+  if (statRating) statRating.textContent = Number(profile.avaliacao_media || 0).toFixed(1);
 
   const now = new Date();
   const assinaturaAtiva =
@@ -2434,28 +2474,32 @@ function updateDashboardUI() {
 
   const boostAtivo = isBoostActive(profile);
 
-
-      const promoLancamentoAtiva =
+  const promoLancamentoAtiva =
     profile.assinatura_ate && new Date(profile.assinatura_ate) > now;
 
-  $("statPlan").textContent = assinaturaAtiva ? "Assinatura ativa" : (promoLancamentoAtiva ? "Promoção de lançamento" : "Plano gratuito");
+  if (statPlan) {
+    statPlan.textContent = assinaturaAtiva
+      ? "Assinatura ativa"
+      : (promoLancamentoAtiva ? "Promoção de lançamento" : "Plano gratuito");
+  }
 
   const partes = [];
 
   if (assinaturaAtiva) {
     partes.push(`Assinatura ativa até ${formatDateTimeBR(profile.assinatura_ate)}.`);
-    } else if (promoLancamentoAtiva) {
-    partes.push(`Você está no período promocional gratuito até ${formatDateTimeBR(profile.assinatura_ate)}. Durante esse período, não é necessário contratar assinatura.`);} else {
+  } else if (promoLancamentoAtiva) {
+    partes.push(`Você está no período promocional gratuito até ${formatDateTimeBR(profile.assinatura_ate)}. Durante esse período, não é necessário contratar assinatura.`);
+  } else {
     partes.push("Você está no plano gratuito no momento, sem assinatura ativa.");
   }
 
-    if (boostAtivo) {
+  if (boostAtivo) {
     partes.push(`Boost ativo${profile.boost_ate ? ` até ${formatDateTimeBR(profile.boost_ate)}` : ""}.`);
   } else {
     partes.push("Boost inativo. Você pode ativar destaque por 7 dias quando quiser.");
   }
 
-  $("planMessage").textContent = partes.join(" ");
+  if (planMessage) planMessage.textContent = partes.join(" ");
 
   $("btnToggleEditProfile")?.classList.remove("hidden");
 
@@ -3386,7 +3430,10 @@ async function avaliarPrestador(prestadorId, options = {}) {
       .from("avaliacoes")
       .insert(insertPayload);
 
-    if (error) throw error;
+    if (error) {
+      console.error("Erro ao inserir avaliação:", error);
+      throw error;
+    }
 
     const { data: ratings, error: ratingsError } = await supabase
       .from("avaliacoes")
@@ -3427,6 +3474,22 @@ async function avaliarPrestador(prestadorId, options = {}) {
       await loadPublicProfile();
       return;
     }
+
+    if (state.currentProviderProfile && String(state.currentProviderProfile.id) === String(prestadorId)) {
+      state.currentProviderProfile.avaliacao_media = roundedMedia;
+    }
+
+    const providerIndex = state.providers.findIndex(item => String(item.id) === String(prestadorId));
+    if (providerIndex >= 0) {
+      state.providers[providerIndex].avaliacao_media = roundedMedia;
+    }
+
+    if (publicMode) {
+      markPublicRatedProvider(prestadorId, nota);
+    }
+
+    await fetchProviders();
+    updateDashboardUI();
 
     showAlert("Avaliação enviada com sucesso.", "success");
     await fetchProviders();
