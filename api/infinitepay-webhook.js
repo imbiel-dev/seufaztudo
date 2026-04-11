@@ -1,8 +1,21 @@
-const { createClient } = require("@supabase/supabase-js");
+import { createClient } from "@supabase/supabase-js";
 
 function isValidWebhookSecret(req) {
-  const headerSecret = req.headers["x-webhook-secret"];
-  return headerSecret && headerSecret === process.env.INFINITEPAY_WEBHOOK_SECRET;
+  const possibleSecrets = [
+    req.headers["x-webhook-secret"],
+    req.headers["x-infinitepay-secret"],
+    req.headers["x-signature"],
+    req.headers["authorization"]
+  ].filter(Boolean);
+
+  if (!process.env.INFINITEPAY_WEBHOOK_SECRET) {
+    return false;
+  }
+
+  return possibleSecrets.some(value => {
+    const normalized = String(value).replace(/^Bearer\s+/i, "").trim();
+    return normalized === process.env.INFINITEPAY_WEBHOOK_SECRET;
+  });
 }
 
 function normalizeStatus(value) {
@@ -64,9 +77,19 @@ function addDays(baseDate, days) {
   return result;
 }
 
-module.exports = async (req, res) => {
+export default async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método não permitido" });
+  }
+
+    if (
+    !process.env.SUPABASE_URL ||
+    !process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    !process.env.INFINITEPAY_WEBHOOK_SECRET
+  ) {
+    return res.status(500).json({
+      error: "Variáveis de ambiente obrigatórias do webhook não configuradas."
+    });
   }
 
   if (!isValidWebhookSecret(req)) {
@@ -81,22 +104,30 @@ module.exports = async (req, res) => {
 
     const body = req.body || {};
 
-    const orderNsu = pick(body, [
+        const orderNsu = pick(body, [
       "order_nsu",
       "orderNsu",
       "data.order_nsu",
       "data.orderNsu",
       "invoice.order_nsu",
-      "payment.order_nsu"
+      "payment.order_nsu",
+      "invoice.orderNsu",
+      "payment.orderNsu",
+      "metadata.order_nsu",
+      "metadata.orderNsu"
     ]);
 
-    const rawStatus = pick(body, [
+        const rawStatus = pick(body, [
       "status",
       "payment_status",
       "paymentStatus",
       "data.status",
       "invoice.status",
-      "payment.status"
+      "payment.status",
+      "invoice.payment_status",
+      "invoice.paymentStatus",
+      "data.payment_status",
+      "data.paymentStatus"
     ]);
 
     const transactionNsu = pick(body, [

@@ -1186,20 +1186,26 @@ async function incrementProviderViews(providerId) {
   if (!providerId || !supabase) return;
 
   const provider = state.providers.find(p => p.id === providerId);
-  if (!provider) return;
-
-  const newViews = Number(provider.visualizacoes || 0) + 1;
+  const currentViews = Number(provider?.visualizacoes || 0);
+  const newViews = currentViews + 1;
 
   const { error } = await supabase
     .from("prestadores")
     .update({ visualizacoes: newViews })
     .eq("id", providerId);
 
-  if (!error) {
-    provider.visualizacoes = newViews;
+  if (error) {
+    console.error("Erro ao incrementar visualizações:", error);
+    return;
+  }
 
-    if (state.currentProviderProfile?.id === providerId) {
-      state.currentProviderProfile.visualizacoes = newViews;
+  if (provider) {
+    provider.visualizacoes = newViews;
+  }
+
+  if (state.currentProviderProfile?.id === providerId) {
+    state.currentProviderProfile.visualizacoes = newViews;
+    if ($("statViews")) {
       $("statViews").textContent = String(newViews);
     }
   }
@@ -1209,20 +1215,26 @@ async function incrementWhatsappClicks(providerId) {
   if (!providerId || !supabase) return;
 
   const provider = state.providers.find(p => p.id === providerId);
-  if (!provider) return;
-
-  const newClicks = Number(provider.cliques_whatsapp || 0) + 1;
+  const currentClicks = Number(provider?.cliques_whatsapp || 0);
+  const newClicks = currentClicks + 1;
 
   const { error } = await supabase
     .from("prestadores")
     .update({ cliques_whatsapp: newClicks })
     .eq("id", providerId);
 
-  if (!error) {
-    provider.cliques_whatsapp = newClicks;
+  if (error) {
+    console.error("Erro ao incrementar cliques no WhatsApp:", error);
+    return;
+  }
 
-    if (state.currentProviderProfile?.id === providerId) {
-      state.currentProviderProfile.cliques_whatsapp = newClicks;
+  if (provider) {
+    provider.cliques_whatsapp = newClicks;
+  }
+
+  if (state.currentProviderProfile?.id === providerId) {
+    state.currentProviderProfile.cliques_whatsapp = newClicks;
+    if ($("statWhatsapp")) {
       $("statWhatsapp").textContent = String(newClicks);
     }
   }
@@ -1970,7 +1982,18 @@ function bindDashboard() {
         throw error;
       }
 
-      state.currentProviderProfile = {
+      const { data: refreshedProfile, error: refreshedProfileError } = await supabase
+      .from("prestadores")
+      .select("*")
+      .eq("id", state.currentProviderProfile.id)
+      .eq("user_id", state.currentUser.id)
+      .maybeSingle();
+
+    if (refreshedProfileError) {
+      throw refreshedProfileError;
+    }
+
+    state.currentProviderProfile = refreshedProfile || {
       ...state.currentProviderProfile,
       ...updated
     };
@@ -1979,14 +2002,14 @@ function bindDashboard() {
     if (idx >= 0) {
       state.providers[idx] = {
         ...state.providers[idx],
-        ...updated
+        ...state.currentProviderProfile
       };
     }
 
-      state.profileDraftBackup = null;
-      updateDashboardUI();
-      setProfileEditMode(false);
-      showAlert("Perfil salvo com sucesso.", "success");
+    state.profileDraftBackup = null;
+    updateDashboardUI();
+    setProfileEditMode(false);
+    showAlert("Perfil salvo com sucesso.", "success");
     } catch (error) {
       console.error(error);
       if (error.name === "AbortError") {

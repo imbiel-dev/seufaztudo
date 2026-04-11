@@ -6,6 +6,18 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: "Método não permitido" });
   }
 
+      if (
+      !process.env.SUPABASE_URL ||
+      !process.env.SUPABASE_ANON_KEY ||
+      !process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      !process.env.INFINITEPAY_HANDLE ||
+      !process.env.APP_BASE_URL
+    ) {
+      return res.status(500).json({
+        error: "Variáveis de ambiente obrigatórias não configuradas no backend."
+      });
+    }
+
   try {
     const authHeader = req.headers.authorization || "";
     const token = authHeader.replace(/^Bearer\s+/i, "");
@@ -114,7 +126,7 @@ module.exports = async (req, res) => {
       }
     };
 
-    const response = await fetch("https://api.infinitepay.io/invoices/public/checkout/links", {
+        const response = await fetch("https://api.infinitepay.io/invoices/public/checkout/links", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -122,7 +134,16 @@ module.exports = async (req, res) => {
       body: JSON.stringify(payload)
     });
 
-    const data = await response.json().catch(() => ({}));
+    const responseText = await response.text();
+    let data = {};
+
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch (_error) {
+      data = {
+        raw_response_text: responseText
+      };
+    }
 
     if (!response.ok) {
       await supabase
@@ -133,8 +154,9 @@ module.exports = async (req, res) => {
         })
         .eq("order_nsu", orderNsu);
 
-      return res.status(500).json({
-        error: data?.message || data?.error || "Erro ao criar checkout na InfinitePay"
+            return res.status(500).json({
+        error: data?.message || data?.error || "Erro ao criar checkout na InfinitePay",
+        details: data
       });
     }
 
@@ -154,8 +176,9 @@ module.exports = async (req, res) => {
         })
         .eq("order_nsu", orderNsu);
 
-      return res.status(500).json({
-        error: "Checkout criado, mas a URL não foi encontrada na resposta"
+            return res.status(500).json({
+        error: "Checkout criado, mas a URL não foi encontrada na resposta",
+        details: data
       });
     }
 
