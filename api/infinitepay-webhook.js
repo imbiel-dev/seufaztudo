@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+const { createClient } = require("@supabase/supabase-js");
 
 function isValidWebhookSecret(req) {
   const possibleSecrets = [
@@ -77,7 +77,7 @@ function addDays(baseDate, days) {
   return result;
 }
 
-export default async (req, res) => {
+module.exports = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método não permitido" });
   }

@@ -1270,31 +1270,30 @@ function bindNavigation() {
   });
 
     $("btnLogout")?.addEventListener("click", async () => {
-    if (!supabase) return;
+  if (!supabase) return;
 
-    const button = $("btnLogout");
+  const button = $("btnLogout");
 
-    try {
-      setButtonLoading(button, true, "Saindo...");
+  try {
+    setButtonLoading(button, true, "Saindo...");
 
-      clearUserSessionState();
-      navigate("home");
-      renderSearchEmptyState("initial");
-
-      const { error } = await supabase.auth.signOut({ scope: "local" });
-      if (error) {
-        console.error("Erro ao inserir avaliação:", error);
-        throw error;
-      }
-
-      showAlert("Você saiu da conta.", "success");
-    } catch (error) {
-      console.error(error);
-      showAlert(error.message || "Erro ao sair da conta.", "error");
-    } finally {
-      setButtonLoading(button, false);
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) {
+      console.error("Erro ao sair da conta:", error);
+      throw error;
     }
-  });
+
+    clearUserSessionState();
+    navigate("home");
+    renderSearchEmptyState("initial");
+    showAlert("Você saiu da conta.", "success");
+  } catch (error) {
+    console.error(error);
+    showAlert(error.message || "Erro ao sair da conta.", "error");
+  } finally {
+    setButtonLoading(button, false);
+  }
+});
 }
 
 function bindHome() {
@@ -1456,26 +1455,26 @@ function bindLogin() {
     }
 
     try {
-      setButtonLoading(submitBtn, true, "Entrando...");
+  setButtonLoading(submitBtn, true, "Entrando...");
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password
+  });
 
-      if (error) {
-        console.error("Erro ao inserir avaliação:", error);
-        throw error;
-      }
+  if (error) {
+    console.error("Erro no login:", error);
+    throw error;
+  }
 
-      state.currentUser = data.user || null;
-      state.isPasswordRecoveryMode = false;
-      updatePasswordRecoveryUI();
+  state.currentUser = data.user || null;
+  state.isPasswordRecoveryMode = false;
+  updatePasswordRecoveryUI();
 
-      await loadMyProvider(true);
-      refreshAuthUI();
-      redirectAfterAuth({ silent: false });
-    } catch (error) {
+  await loadMyProvider(true);
+  refreshAuthUI();
+  redirectAfterAuth({ silent: false });
+} catch (error) {
       console.error(error);
       showAlert(mapAuthErrorMessage(error), "error");
     } finally {
@@ -1507,9 +1506,9 @@ function bindLogin() {
       });
 
       if (error) {
-        console.error("Erro ao inserir avaliação:", error);
-        throw error;
-      }
+  console.error("Erro ao enviar link de recuperação:", error);
+  throw error;
+}
 
       showAlert(
         "Enviamos o link de recuperação para seu e-mail. Abra a mensagem e clique no link para definir uma nova senha.",
@@ -1966,50 +1965,50 @@ function bindDashboard() {
       setButtonLoading(submitBtn, true, "Salvando...");
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
+     const timeout = setTimeout(() => controller.abort(), 30000);
 
-      const { error } = await supabase
-        .from("prestadores")
-        .update(updated)
-        .eq("id", state.currentProviderProfile.id)
-        .eq("user_id", state.currentUser.id)
-        .abortSignal(controller.signal);
+const { error } = await supabase
+  .from("prestadores")
+  .update(updated)
+  .eq("id", state.currentProviderProfile.id)
+  .eq("user_id", state.currentUser.id)
+  .abortSignal(controller.signal);
 
-      clearTimeout(timeout);
+clearTimeout(timeout);
 
-      if (error) {
-        console.error("Erro ao inserir avaliação:", error);
-        throw error;
-      }
+if (error) {
+  console.error("Erro ao salvar perfil:", error);
+  throw error;
+}
 
-      const { data: refreshedProfile, error: refreshedProfileError } = await supabase
-      .from("prestadores")
-      .select("*")
-      .eq("id", state.currentProviderProfile.id)
-      .eq("user_id", state.currentUser.id)
-      .maybeSingle();
+const { data: refreshedProfile, error: refreshedProfileError } = await supabase
+  .from("prestadores")
+  .select("*")
+  .eq("id", state.currentProviderProfile.id)
+  .eq("user_id", state.currentUser.id)
+  .maybeSingle();
 
-    if (refreshedProfileError) {
-      throw refreshedProfileError;
-    }
+if (refreshedProfileError) {
+  throw refreshedProfileError;
+}
 
-    state.currentProviderProfile = refreshedProfile || {
-      ...state.currentProviderProfile,
-      ...updated
-    };
+state.currentProviderProfile = refreshedProfile || {
+  ...state.currentProviderProfile,
+  ...updated
+};
 
-    const idx = state.providers.findIndex(p => p.id === state.currentProviderProfile.id);
-    if (idx >= 0) {
-      state.providers[idx] = {
-        ...state.providers[idx],
-        ...state.currentProviderProfile
-      };
-    }
+const idx = state.providers.findIndex(p => p.id === state.currentProviderProfile.id);
+if (idx >= 0) {
+  state.providers[idx] = {
+    ...state.providers[idx],
+    ...state.currentProviderProfile
+  };
+}
 
-    state.profileDraftBackup = null;
-    updateDashboardUI();
-    setProfileEditMode(false);
-    showAlert("Perfil salvo com sucesso.", "success");
+state.profileDraftBackup = null;
+updateDashboardUI();
+setProfileEditMode(false);
+showAlert("Perfil salvo com sucesso.", "success");
     } catch (error) {
       console.error(error);
       if (error.name === "AbortError") {
@@ -2053,15 +2052,23 @@ function bindChangePassword() {
     try {
       setButtonLoading(submitBtn, true, "Atualizando senha...");
 
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("TIMEOUT_CHANGE_PASSWORD")), 15000);
-      });
+      const {
+  data: { session }
+} = await supabase.auth.getSession();
 
-      const updatePromise = supabase.auth.updateUser({
-        password: newPassword
-      });
+if (!session?.user) {
+  throw new Error("Sessão inválida. Faça login novamente.");
+}
 
-      const result = await Promise.race([updatePromise, timeoutPromise]);
+const timeoutPromise = new Promise((_, reject) => {
+  setTimeout(() => reject(new Error("TIMEOUT_CHANGE_PASSWORD")), 30000);
+});
+
+const updatePromise = supabase.auth.updateUser({
+  password: newPassword
+});
+
+const result = await Promise.race([updatePromise, timeoutPromise]);
 
       if (result?.error) throw result.error;
 
@@ -2071,16 +2078,16 @@ function bindChangePassword() {
 
       showAlert("Senha atualizada com sucesso.", "success");
     } catch (error) {
-      console.error(error);
+  console.error(error);
 
-      if (error.message === "TIMEOUT_CHANGE_PASSWORD") {
-        showAlert("A atualização de senha demorou demais para responder. Tente novamente.", "error");
-      } else {
-        showAlert(mapAuthErrorMessage(error) || "Erro ao atualizar senha.", "error");
-      }
-    } finally {
-      setButtonLoading(submitBtn, false);
-    }
+  if (error.message === "TIMEOUT_CHANGE_PASSWORD") {
+    showAlert("A atualização de senha demorou demais para responder. Tente novamente.", "error");
+  } else {
+    showAlert(mapAuthErrorMessage(error) || error.message || "Erro ao atualizar senha.", "error");
+  }
+} finally {
+  setButtonLoading(submitBtn, false);
+}
   });
 }
 
@@ -2127,9 +2134,9 @@ function bindPayments() {
         .maybeSingle();
 
       if (error) {
-        console.error("Erro ao inserir avaliação:", error);
-        throw error;
-      }
+  console.error("Erro ao atualizar status do plano:", error);
+  throw error;
+}
 
       state.currentProviderProfile = data || null;
       updateDashboardUI();
