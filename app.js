@@ -488,6 +488,94 @@ function setButtonLoading(button, isLoading, loadingText) {
   }
 }
 
+async function withRequestTimeout(promise, timeoutMs, timeoutMessage) {
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(timeoutMessage || "A operação demorou mais que o esperado."));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function startCheckoutFlow(tipo) {
+  if (!supabase) {
+    throw new Error("Supabase não configurado corretamente.");
+  }
+
+  if (!state.currentUser) {
+    throw new Error("Faça login para continuar.");
+  }
+
+  if (!state.currentProviderProfile?.id) {
+    await loadMyProvider(true);
+  }
+
+  if (!state.currentProviderProfile?.id) {
+    throw new Error("Seu perfil de prestador não foi encontrado.");
+  }
+
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+
+  const accessToken = session?.access_token;
+  if (!accessToken) {
+    throw new Error("Sua sessão expirou. Entre novamente.");
+  }
+
+  const payload = {
+    tipo,
+    prestadorId: state.currentProviderProfile.id,
+    nomePrestador: state.currentProviderProfile.nome || state.currentUser.email || "Prestador",
+    emailPrestador: state.currentProviderProfile.email || state.currentUser.email || ""
+  };
+
+  const response = await withRequestTimeout(
+    fetch("/api/create-checkout", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify(payload)
+    }),
+    20000,
+    "A criação do checkout demorou demais. Tente novamente."
+  );
+
+  const rawText = await response.text();
+
+  let result = null;
+  try {
+    result = rawText ? JSON.parse(rawText) : null;
+  } catch (_error) {
+    result = { raw: rawText };
+  }
+
+  if (!response.ok) {
+    console.error("Erro ao criar checkout:", result);
+    throw new Error(
+      result?.error ||
+      result?.details ||
+      "Não foi possível criar o checkout."
+    );
+  }
+
+  if (!result?.url) {
+    console.error("Resposta sem URL de checkout:", result);
+    throw new Error("O checkout foi criado sem URL de redirecionamento.");
+  }
+
+  return result;
+}
+
 function setupPasswordToggles() {
   document.querySelectorAll("[data-toggle-password]").forEach(button => {
     button.addEventListener("click", () => {
@@ -645,6 +733,10 @@ async function ensureProviderProfileForCurrentUser() {
     .select("*")
     .eq("user_id", currentUserId)
     .maybeSingle();
+
+    if (Array.isArray(existingByUserId)) {
+  console.warn("Mais de um perfil encontrado para o mesmo usuário.");
+}
 
   if (existingByUserIdError) throw existingByUserIdError;
 
@@ -1270,28 +1362,15 @@ function bindNavigation() {
   });
 
     $("btnLogout")?.addEventListener("click", async () => {
-  if (!supabase) return;
-
-  const button = $("btnLogout");
-
   try {
-    setButtonLoading(button, true, "Saindo...");
+    await supabase.auth.signOut();
 
-    const { error } = await supabase.auth.signOut({ scope: "local" });
-    if (error) {
-      console.error("Erro ao sair da conta:", error);
-      throw error;
-    }
+    showAlert("Você saiu da conta.", "info");
 
-    clearUserSessionState();
     navigate("home");
-    renderSearchEmptyState("initial");
-    showAlert("Você saiu da conta.", "success");
   } catch (error) {
     console.error(error);
-    showAlert(error.message || "Erro ao sair da conta.", "error");
-  } finally {
-    setButtonLoading(button, false);
+    showAlert("Erro ao sair da conta.", "error");
   }
 });
 }
@@ -1457,7 +1536,7 @@ function bindLogin() {
     try {
   setButtonLoading(submitBtn, true, "Entrando...");
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { error } = await supabase.auth.signInWithPassword({
     email,
     password
   });
@@ -1467,60 +1546,39 @@ function bindLogin() {
     throw error;
   }
 
-  state.currentUser = data.user || null;
-  state.isPasswordRecoveryMode = false;
-  updatePasswordRecoveryUI();
-
-  await loadMyProvider(true);
-  refreshAuthUI();
-  redirectAfterAuth({ silent: false });
+  showAlert("Login recebido. Finalizando entrada...", "info");
 } catch (error) {
-      console.error(error);
-      showAlert(mapAuthErrorMessage(error), "error");
-    } finally {
-      setButtonLoading(submitBtn, false);
-    }
+  console.error(error);
+  showAlert(mapAuthErrorMessage(error), "error");
+} finally {
+  setButtonLoading(submitBtn, false);
+}
   });
 
   $("btnForgotPassword")?.addEventListener("click", async () => {
-    if (!supabase) {
-      showAlert("Supabase não configurado corretamente.", "error");
-      return;
-    }
+  const email = $("loginEmail")?.value?.trim();
 
-    const email = $("loginEmail").value.trim();
-    const button = $("btnForgotPassword");
+  if (!email) {
+    showAlert("Digite seu e-mail para recuperar a senha.", "error");
+    return;
+  }
 
-    if (!isValidEmail(email)) {
-      showAlert("Digite seu e-mail antes de solicitar a recuperação de senha.", "error");
-      return;
-    }
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/`
+    });
 
-    try {
-      setButtonLoading(button, true, "Enviando link...");
-
-      const redirectUrl = `${window.location.origin}${window.location.pathname}`;
-
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: redirectUrl
-      });
-
-      if (error) {
-  console.error("Erro ao enviar link de recuperação:", error);
-  throw error;
-}
-
-      showAlert(
-        "Enviamos o link de recuperação para seu e-mail. Abra a mensagem e clique no link para definir uma nova senha.",
-        "success"
-      );
-    } catch (error) {
+    if (error) {
       console.error(error);
-      showAlert(mapAuthErrorMessage(error), "error");
-    } finally {
-      setButtonLoading(button, false);
+      throw error;
     }
-  });
+
+    showAlert("E-mail de recuperação enviado. Verifique sua caixa de entrada.", "success");
+  } catch (error) {
+    console.error(error);
+    showAlert("Erro ao enviar e-mail de recuperação.", "error");
+  }
+});
 }
 
 function isValidEmail(value) {
@@ -1894,261 +1952,305 @@ function bindDashboard() {
     }
   });
 
-  $("formProfile")?.addEventListener("submit", async event => {
-    event.preventDefault();
+ $("formProfile")?.addEventListener("submit", async event => {
+  event.preventDefault();
 
-    if (!state.currentUser || !state.currentProviderProfile) {
-      showAlert("Faça login para salvar o perfil.", "error");
-      return;
+  if (!supabase) {
+    showAlert("Supabase não configurado corretamente.", "error");
+    return;
+  }
+
+  if (!state.currentUser) {
+    showAlert("Faça login novamente para salvar seu perfil.", "error");
+    navigate("login");
+    return;
+  }
+
+  const button = $("btnSaveProfile");
+
+  try {
+    setButtonLoading(button, true, "Salvando...");
+
+    if (!state.currentProviderProfile?.id) {
+      await loadMyProvider(true);
     }
 
-    const submitBtn = $("btnSaveProfile");
+    if (!state.currentProviderProfile?.id) {
+      throw new Error("Seu perfil de prestador não foi encontrado.");
+    }
 
-    const primaryService = sanitizeSingleService($("profileService").value);
+    const primaryService = sanitizeSingleService($("profileService")?.value);
     const allServices = buildProviderServices(primaryService, state.profileAdditionalServices);
-    const nome = $("profileName").value.trim();
-    const whatsapp = normalizeWhatsappBR($("profileWhatsapp").value);
-    const experiencia = Number($("profileExperience").value || 0);
-    const preco = Number($("profilePrice").value || 0);
-    const raio = Number($("profileRadius").value || 10);
-    const descricao = $("profileDescription").value.trim();
 
-    if (!nome) {
-      showAlert("Informe seu nome profissional.", "error");
-      return;
+    if (!$("profileName")?.value?.trim()) {
+      throw new Error("Digite seu nome.");
     }
 
+    if (!primaryService) {
+      throw new Error("Digite um serviço principal válido.");
+    }
+
+    const whatsapp = normalizeWhatsappBR($("profileWhatsapp")?.value);
     if (!whatsapp) {
-      showAlert("Digite um WhatsApp válido com DDD.", "error");
-      return;
+      throw new Error("Digite um WhatsApp válido com DDD.");
     }
 
-    if (!allServices.length) {
-      showAlert("Informe pelo menos um serviço.", "error");
-      return;
-    }
+    const latitude =
+      Number.isFinite(Number(state.currentProviderProfile?.latitude))
+        ? Number(state.currentProviderProfile.latitude)
+        : null;
 
-    if (!Number.isFinite(experiencia) || experiencia < 0) {
-      showAlert("Informe anos de experiência válidos.", "error");
-      return;
-    }
+    const longitude =
+      Number.isFinite(Number(state.currentProviderProfile?.longitude))
+        ? Number(state.currentProviderProfile.longitude)
+        : null;
 
-    if (!Number.isFinite(preco) || preco < 0) {
-      showAlert("Informe um preço médio válido.", "error");
-      return;
-    }
-
-    const lat = Number(state.currentProviderProfile.latitude);
-    const lng = Number(state.currentProviderProfile.longitude);
-
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      showAlert("Atualize sua localização antes de salvar o perfil.", "error");
-      return;
-    }
-
-    const updated = {
-      nome,
+    const updatePayload = {
+      nome: safeTrim($("profileName")?.value, 120),
       whatsapp,
-      servicos: allServices,
       servico: primaryService,
-      experiencia_anos: experiencia,
-      preco_medio: preco,
-      raio_km: raio,
-      descricao,
-      atende_emergencia: $("profileEmergency").checked,
-      latitude: lat,
-      longitude: lng,
-      location: `POINT(${lng} ${lat})`
+      servicos: allServices,
+      experiencia_anos: toPositiveNumber($("profileExperience")?.value) ?? 0,
+      preco_medio: toPositiveNumber($("profilePrice")?.value) ?? 0,
+      raio_km: toPositiveNumber($("profileRadius")?.value) ?? 10,
+      descricao: safeTrim($("profileDescription")?.value, 1000),
+      atende_emergencia: !!$("profileEmergency")?.checked,
+      latitude,
+      longitude,
+      email: safeTrim(state.currentUser.email, 160)
     };
 
-        try {
-      setButtonLoading(submitBtn, true, "Salvando...");
+    const response = await withRequestTimeout(
+      supabase
+        .from("prestadores")
+        .update(updatePayload)
+        .eq("id", state.currentProviderProfile.id)
+        .eq("user_id", state.currentUser.id)
+        .select("*")
+        .maybeSingle(),
+      15000,
+      "O salvamento do perfil demorou demais. Verifique sua conexão e tente novamente."
+    );
 
-      const controller = new AbortController();
-     const timeout = setTimeout(() => controller.abort(), 30000);
+    const { data, error } = response;
 
-const { error } = await supabase
-  .from("prestadores")
-  .update(updated)
-  .eq("id", state.currentProviderProfile.id)
-  .eq("user_id", state.currentUser.id)
-  .abortSignal(controller.signal);
-
-clearTimeout(timeout);
-
-if (error) {
-  console.error("Erro ao salvar perfil:", error);
-  throw error;
-}
-
-const { data: refreshedProfile, error: refreshedProfileError } = await supabase
-  .from("prestadores")
-  .select("*")
-  .eq("id", state.currentProviderProfile.id)
-  .eq("user_id", state.currentUser.id)
-  .maybeSingle();
-
-if (refreshedProfileError) {
-  throw refreshedProfileError;
-}
-
-state.currentProviderProfile = refreshedProfile || {
-  ...state.currentProviderProfile,
-  ...updated
-};
-
-const idx = state.providers.findIndex(p => p.id === state.currentProviderProfile.id);
-if (idx >= 0) {
-  state.providers[idx] = {
-    ...state.providers[idx],
-    ...state.currentProviderProfile
-  };
-}
-
-state.profileDraftBackup = null;
-updateDashboardUI();
-setProfileEditMode(false);
-showAlert("Perfil salvo com sucesso.", "success");
-    } catch (error) {
-      console.error(error);
-      if (error.name === "AbortError") {
-        showAlert("Salvar perfil demorou demais para responder. Verifique a conexão e as policies da tabela prestadores.", "error");
-      } else {
-        showAlert(mapAuthErrorMessage(error) || "Erro ao salvar perfil.", "error");
-      }
-    } finally {
-      setButtonLoading(submitBtn, false);
+    if (error) {
+      console.error("Erro ao salvar perfil:", error);
+      throw error;
     }
-  });
 
-  $("btnRefreshUrgentRequests")?.addEventListener("click", async () => {
-    await loadProviderUrgentCalls();
-  });
+    if (!data) {
+      throw new Error("O perfil não retornou após a atualização.");
+    }
+
+    state.currentProviderProfile = data;
+    state.profileDraftBackup = null;
+
+    updateDashboardUI();
+    setProfileEditMode(false);
+
+    showAlert("Perfil atualizado com sucesso.", "success");
+  } catch (error) {
+    console.error(error);
+    showAlert(error.message || "Erro ao salvar perfil.", "error");
+  } finally {
+    setButtonLoading(button, false);
+  }
+});
 }
 
 function bindChangePassword() {
   $("formChangePassword")?.addEventListener("submit", async event => {
-    event.preventDefault();
+  event.preventDefault();
 
-    if (!state.currentUser) {
-      showAlert("Faça login para alterar a senha.", "error");
-      return;
-    }
-
-    const submitBtn = $("formChangePassword")?.querySelector('button[type="submit"]');
-    const newPassword = $("newPassword").value;
-    const confirmNewPassword = $("confirmNewPassword").value;
-
-    if (newPassword.length < 6) {
-      showAlert("A nova senha deve ter pelo menos 6 caracteres.", "error");
-      return;
-    }
-
-    if (newPassword !== confirmNewPassword) {
-      showAlert("A confirmação da nova senha não confere.", "error");
-      return;
-    }
-
-    try {
-      setButtonLoading(submitBtn, true, "Atualizando senha...");
-
-      const {
-  data: { session }
-} = await supabase.auth.getSession();
-
-if (!session?.user) {
-  throw new Error("Sessão inválida. Faça login novamente.");
-}
-
-const timeoutPromise = new Promise((_, reject) => {
-  setTimeout(() => reject(new Error("TIMEOUT_CHANGE_PASSWORD")), 30000);
-});
-
-const updatePromise = supabase.auth.updateUser({
-  password: newPassword
-});
-
-const result = await Promise.race([updatePromise, timeoutPromise]);
-
-      if (result?.error) throw result.error;
-
-      $("formChangePassword").reset();
-      state.isPasswordRecoveryMode = false;
-      updatePasswordRecoveryUI();
-
-      showAlert("Senha atualizada com sucesso.", "success");
-    } catch (error) {
-  console.error(error);
-
-  if (error.message === "TIMEOUT_CHANGE_PASSWORD") {
-    showAlert("A atualização de senha demorou demais para responder. Tente novamente.", "error");
-  } else {
-    showAlert(mapAuthErrorMessage(error) || error.message || "Erro ao atualizar senha.", "error");
+  if (!supabase) {
+    showAlert("Supabase não configurado corretamente.", "error");
+    return;
   }
-} finally {
-  setButtonLoading(submitBtn, false);
-}
-  });
+
+  if (!state.currentUser) {
+    showAlert("Faça login para alterar sua senha.", "error");
+    navigate("login");
+    return;
+  }
+
+  const button = $("formChangePassword")?.querySelector('button[type="submit"]');
+  const newPassword = $("newPassword")?.value || "";
+  const confirmNewPassword = $("confirmNewPassword")?.value || "";
+
+  if (newPassword.length < 6) {
+    showAlert("A nova senha deve ter pelo menos 6 caracteres.", "error");
+    return;
+  }
+
+  if (newPassword !== confirmNewPassword) {
+    showAlert("A confirmação da nova senha não confere.", "error");
+    return;
+  }
+
+  try {
+    setButtonLoading(button, true, "Atualizando senha...");
+
+    const response = await withRequestTimeout(
+      supabase.auth.updateUser({
+        password: newPassword
+      }),
+      15000,
+      "A troca de senha demorou demais. Tente novamente."
+    );
+
+    const { error } = response;
+
+    if (error) {
+      console.error("Erro ao atualizar senha:", error);
+      throw error;
+    }
+
+    $("newPassword").value = "";
+    $("confirmNewPassword").value = "";
+    state.isPasswordRecoveryMode = false;
+    updatePasswordRecoveryUI();
+
+    showAlert("Senha atualizada com sucesso.", "success");
+  } catch (error) {
+    console.error(error);
+    showAlert(mapAuthErrorMessage(error), "error");
+  } finally {
+    setButtonLoading(button, false);
+  }
+});
 }
 
 function bindPayments() {
-  $("btnBuyBoost")?.addEventListener("click", async () => {
-    await startCheckout("boost");
-  });
+  $("btnBoost")?.addEventListener("click", async () => {
+  const button = $("btnBoost");
 
-  $("btnBuySubscription")?.addEventListener("click", async () => {
-    if (!state.currentUser || !state.currentProviderProfile) {
-      showAlert("Faça login como prestador.", "error");
+  try {
+    setButtonLoading(button, true, "Abrindo boost...");
+
+    const result = await startCheckoutFlow("boost");
+
+    showAlert("Checkout do boost criado com sucesso.", "success");
+
+    if (result?.url) {
+      window.location.href = result.url;
       return;
     }
 
-    if (isLaunchPromoActive(state.currentProviderProfile)) {
-      showAlert(
-        `Você ainda não precisa assinar agora. Seu perfil faz parte do período promocional gratuito até ${formatDateTimeBR(state.currentProviderProfile.assinatura_ate)}.`,
-        "info"
-      );
+    throw new Error("A InfinitePay não retornou a URL do checkout.");
+  } catch (error) {
+    console.error(error);
+    showAlert(error.message || "Erro ao iniciar boost.", "error");
+  } finally {
+    setButtonLoading(button, false);
+  }
+});
+
+  $("btnSubscription")?.addEventListener("click", async () => {
+  const button = $("btnSubscription");
+
+  try {
+    setButtonLoading(button, true, "Abrindo assinatura...");
+
+    const result = await startCheckoutFlow("assinatura");
+
+    showAlert("Checkout da assinatura criado com sucesso.", "success");
+
+    if (result?.url) {
+      window.location.href = result.url;
       return;
     }
 
-    await startCheckout("assinatura");
-  });
+    throw new Error("A InfinitePay não retornou a URL do checkout.");
+  } catch (error) {
+    console.error(error);
+    showAlert(error.message || "Erro ao iniciar assinatura.", "error");
+  } finally {
+    setButtonLoading(button, false);
+  }
+});
 
     $("btnRefreshPlan")?.addEventListener("click", async () => {
-    const button = $("btnRefreshPlan");
+  const button = $("btnRefreshPlan");
 
-    try {
-      setButtonLoading(button, true, "Atualizando...");
+  try {
+    setButtonLoading(button, true, "Atualizando...");
 
-      const {
-        data: { session }
-      } = await supabase.auth.getSession();
-
-      if (!session?.user?.id) {
-        throw new Error("Faça login novamente.");
-      }
-
-      const { data, error } = await supabase
-        .from("prestadores")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .maybeSingle();
-
-      if (error) {
-  console.error("Erro ao atualizar status do plano:", error);
-  throw error;
-}
-
-      state.currentProviderProfile = data || null;
-      updateDashboardUI();
-
-      showAlert("Status do plano atualizado.", "success");
-    } catch (error) {
-      console.error(error);
-      showAlert(error.message || "Erro ao atualizar status do plano.", "error");
-    } finally {
-      setButtonLoading(button, false);
+    if (!supabase) {
+      throw new Error("Supabase não configurado corretamente.");
     }
-  });
+
+    if (!state.currentUser) {
+      throw new Error("Faça login novamente.");
+    }
+
+    if (!state.currentProviderProfile?.id) {
+      await loadMyProvider(true);
+    }
+
+    if (!state.currentProviderProfile?.id) {
+      throw new Error("Seu perfil de prestador não foi encontrado.");
+    }
+
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      throw new Error("Sua sessão expirou. Entre novamente.");
+    }
+
+    const response = await withRequestTimeout(
+      fetch("/api/check-payment-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          prestadorId: state.currentProviderProfile.id
+        })
+      }),
+      20000,
+      "A atualização do status demorou demais. Tente novamente."
+    );
+
+    const rawText = await response.text();
+
+    let result = null;
+    try {
+      result = rawText ? JSON.parse(rawText) : null;
+    } catch (_error) {
+      result = { raw: rawText };
+    }
+
+    if (!response.ok) {
+      console.error("Erro ao sincronizar pagamentos:", result);
+      throw new Error(
+        result?.error ||
+        result?.details ||
+        "Não foi possível atualizar o status do plano."
+      );
+    }
+
+    state.currentProviderProfile = result?.profile || state.currentProviderProfile;
+    updateDashboardUI();
+
+    const checked = Number(result?.checked || 0);
+
+    if (checked > 0) {
+      showAlert("Status sincronizado com a InfinitePay com sucesso.", "success");
+    } else {
+      showAlert("Nenhum pagamento pendente precisou de sincronização.", "info");
+    }
+  } catch (error) {
+    console.error(error);
+    showAlert(error.message || "Erro ao atualizar status do plano.", "error");
+  } finally {
+    setButtonLoading(button, false);
+  }
+});
 }
 
 async function startCheckout(tipo) {
@@ -2166,7 +2268,7 @@ async function startCheckout(tipo) {
     return;
   }
 
-  const button = tipo === "boost" ? $("btnBuyBoost") : $("btnBuySubscription");
+  const button = tipo === "boost" ? $("btnBoost") : $("btnSubscription");
   const loadingText =
     tipo === "boost" ? "Abrindo boost..." : "Abrindo assinatura...";
 
@@ -2997,13 +3099,13 @@ async function processPaymentReturn() {
   if (!pagamento) return;
 
   if (pagamento === "sucesso") {
-    showAlert(
-      orderNsu
-        ? `Pagamento identificado com sucesso. Pedido: ${orderNsu}. Agora clique em "Atualizar status" para sincronizar seu plano no painel.`
-        : `Pagamento identificado com sucesso. Agora clique em "Atualizar status" para sincronizar seu plano no painel.`,
-      "success"
-    );
-  } else if (pagamento === "cancelado") {
+  showAlert(
+    orderNsu
+      ? `Pagamento concluído. Pedido: ${orderNsu}. Clique em "Atualizar status" para confirmar e ativar o benefício no painel.`
+      : `Pagamento concluído. Clique em "Atualizar status" para confirmar e ativar o benefício no painel.`,
+    "success"
+  );
+} else if (pagamento === "cancelado") {
     showAlert("O pagamento foi cancelado.", "info");
   } else {
     showAlert("Retorno do pagamento identificado.", "info");
@@ -3232,6 +3334,35 @@ async function processAuthCallbackFromUrl() {
   return handled;
 }
 
+async function handleAuthenticatedUser(event, options = {}) {
+  const { silentRedirect = false } = options;
+
+  if (!state.currentUser) return;
+
+  await loadMyProvider(true);
+  initRealtime();
+
+  if (event === "PASSWORD_RECOVERY") {
+    state.isPasswordRecoveryMode = true;
+    navigate("dashboard");
+    updatePasswordRecoveryUI();
+    showAlert("Link de recuperação validado. Agora defina sua nova senha no painel.", "success");
+    return;
+  }
+
+  if (event === "USER_UPDATED") {
+    updateDashboardUI();
+    return;
+  }
+
+  if (event === "TOKEN_REFRESHED") {
+    updateDashboardUI();
+    return;
+  }
+
+  redirectAfterAuth({ silent: silentRedirect });
+}
+
 async function restoreSession() {
   if (!supabase) return;
 
@@ -3245,12 +3376,13 @@ async function restoreSession() {
   refreshAuthUI();
 
   if (state.currentUser) {
-    await loadMyProvider(true);
-    initRealtime();
-
     const currentScreen = document.querySelector(".screen.active")?.id || "";
     const isAuthScreen =
       currentScreen === "screen-login" || currentScreen === "screen-register";
+
+    await handleAuthenticatedUser("INITIAL_SESSION", {
+      silentRedirect: !(isAuthScreen || state.currentRoute === "login" || state.currentRoute === "register")
+    });
 
     if (isAuthScreen || state.currentRoute === "login" || state.currentRoute === "register") {
       redirectAfterAuth({ silent: true });
@@ -3259,43 +3391,26 @@ async function restoreSession() {
     clearUserSessionState();
   }
 
-  supabase.auth.onAuthStateChange(async (event, sessionNow) => {
+  supabase.auth.onAuthStateChange((event, sessionNow) => {
     state.currentUser = sessionNow?.user || null;
     refreshAuthUI();
 
     state.isPasswordRecoveryMode = false;
     updatePasswordRecoveryUI();
 
-    if (state.currentUser) {
-      await loadMyProvider(true);
-      initRealtime();
-
-      if (event === "SIGNED_IN") {
-        redirectAfterAuth({ silent: false });
-        return;
-      }
-
-      if (event === "TOKEN_REFRESHED") {
-        updateDashboardUI();
-        return;
-      }
-
-      if (event === "USER_UPDATED") {
-        await loadMyProvider(true);
-        updateDashboardUI();
-        return;
-      }
-
-      if (event === "PASSWORD_RECOVERY") {
-        state.isPasswordRecoveryMode = true;
-        navigate("dashboard");
-        updatePasswordRecoveryUI();
-        showAlert("Link de recuperação validado. Agora defina sua nova senha no painel.", "success");
-        return;
-      }
-    } else {
+    if (!state.currentUser) {
       clearUserSessionState();
+      return;
     }
+
+    setTimeout(() => {
+      handleAuthenticatedUser(event, {
+        silentRedirect: event !== "SIGNED_IN"
+      }).catch(error => {
+        console.error("Erro no pós-auth:", error);
+        showAlert(error.message || "Erro ao carregar sua conta.", "error");
+      });
+    }, 0);
   });
 }
 

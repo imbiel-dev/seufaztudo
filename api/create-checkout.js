@@ -6,17 +6,31 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: "Método não permitido" });
   }
 
-      if (
-      !process.env.SUPABASE_URL ||
-      !process.env.SUPABASE_ANON_KEY ||
-      !process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      !process.env.INFINITEPAY_HANDLE ||
-      !process.env.APP_BASE_URL
-    ) {
-      return res.status(500).json({
-        error: "Variáveis de ambiente obrigatórias não configuradas no backend."
-      });
-    }
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_PUBLIC_KEY =
+    process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const INFINITEPAY_HANDLE = process.env.INFINITEPAY_HANDLE;
+  const APP_BASE_URL = process.env.APP_BASE_URL;
+
+  if (
+    !SUPABASE_URL ||
+    !SUPABASE_PUBLIC_KEY ||
+    !SUPABASE_SERVICE_ROLE_KEY ||
+    !INFINITEPAY_HANDLE ||
+    !APP_BASE_URL
+  ) {
+    return res.status(500).json({
+      error: "Variáveis de ambiente obrigatórias não configuradas no backend.",
+      details: {
+        hasSupabaseUrl: !!SUPABASE_URL,
+        hasSupabasePublicKey: !!SUPABASE_PUBLIC_KEY,
+        hasSupabaseServiceRoleKey: !!SUPABASE_SERVICE_ROLE_KEY,
+        hasInfinitepayHandle: !!INFINITEPAY_HANDLE,
+        hasAppBaseUrl: !!APP_BASE_URL
+      }
+    });
+  }
 
   try {
     const authHeader = req.headers.authorization || "";
@@ -27,8 +41,14 @@ module.exports = async (req, res) => {
     }
 
     const supabaseAuth = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_ANON_KEY
+      SUPABASE_URL,
+      SUPABASE_PUBLIC_KEY,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false
+        }
+      }
     );
 
     const { data: authData, error: authError } = await supabaseAuth.auth.getUser(token);
@@ -40,8 +60,14 @@ module.exports = async (req, res) => {
     const authenticatedUserId = authData.user.id;
 
     const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
+      SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false
+        }
+      }
     );
 
     const {
@@ -101,7 +127,8 @@ module.exports = async (req, res) => {
         valor_centavos: valorCentavos,
         dias,
         order_nsu: orderNsu,
-        gateway: "infinitepay"
+        gateway: "infinitepay",
+        descricao
       });
 
     if (insertError) {
@@ -109,7 +136,7 @@ module.exports = async (req, res) => {
     }
 
     const payload = {
-      handle: process.env.INFINITEPAY_HANDLE,
+      handle: INFINITEPAY_HANDLE,
       items: [
         {
           quantity: 1,
@@ -118,15 +145,15 @@ module.exports = async (req, res) => {
         }
       ],
       order_nsu: orderNsu,
-      redirect_url: `${process.env.APP_BASE_URL}/?pagamento=sucesso&order_nsu=${orderNsu}`,
-      webhook_url: `${process.env.APP_BASE_URL}/api/infinitepay-webhook`,
+      redirect_url: `${APP_BASE_URL}/?pagamento=sucesso&order_nsu=${orderNsu}`,
+      webhook_url: `${APP_BASE_URL}/api/infinitepay-webhook`,
       customer: {
         name: nomePrestador || prestador.nome || "Prestador seufaztudo",
         email: emailPrestador || authData.user.email || ""
       }
     };
 
-        const response = await fetch("https://api.infinitepay.io/invoices/public/checkout/links", {
+    const response = await fetch("https://api.infinitepay.io/invoices/public/checkout/links", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -134,68 +161,94 @@ module.exports = async (req, res) => {
       body: JSON.stringify(payload)
     });
 
-    const responseText = await response.text();
-    let data = {};
+    const rawText = await response.text();
 
+    let responseData = null;
     try {
-      data = responseText ? JSON.parse(responseText) : {};
+      responseData = rawText ? JSON.parse(rawText) : null;
     } catch (_error) {
-      data = {
-        raw_response_text: responseText
-      };
+      responseData = { raw: rawText };
     }
 
     if (!response.ok) {
+      console.error("Erro da InfinitePay ao criar checkout:", response.status, responseData);
+
       await supabase
         .from("pagamentos")
         .update({
           status: "falhou",
-          raw_payload: data
+          raw_payload: responseData
         })
         .eq("order_nsu", orderNsu);
 
-            return res.status(500).json({
-        error: data?.message || data?.error || "Erro ao criar checkout na InfinitePay",
-        details: data
+      return res.status(response.status).json({
+        error: "Falha ao criar checkout na InfinitePay.",
+        infinitepay_status: response.status,
+        infinitepay_response: responseData
       });
     }
 
     const checkoutUrl =
-      data?.checkout_url ||
-      data?.url ||
-      data?.link ||
-      data?.invoice_url ||
+      responseData?.url ||
+      responseData?.checkout_url ||
+      responseData?.data?.url ||
+      responseData?.data?.checkout_url ||
+      responseData?.link ||
+      responseData?.invoice_url ||
+      null;
+
+    const invoiceSlug =
+      responseData?.slug ||
+      responseData?.invoice_slug ||
+      responseData?.data?.slug ||
+      responseData?.data?.invoice_slug ||
       null;
 
     if (!checkoutUrl) {
+      console.error("Resposta da InfinitePay sem URL de checkout:", responseData);
+
       await supabase
         .from("pagamentos")
         .update({
           status: "falhou",
-          raw_payload: data
+          raw_payload: responseData
         })
         .eq("order_nsu", orderNsu);
 
-            return res.status(500).json({
-        error: "Checkout criado, mas a URL não foi encontrada na resposta",
-        details: data
+      return res.status(502).json({
+        error: "A InfinitePay respondeu sem URL de checkout.",
+        infinitepay_response: responseData
       });
     }
 
-    await supabase
+    const { error: paymentUpdateError } = await supabase
       .from("pagamentos")
       .update({
         checkout_url: checkoutUrl,
-        raw_payload: data
+        invoice_slug: invoiceSlug,
+        descricao,
+        raw_payload: responseData
       })
       .eq("order_nsu", orderNsu);
 
+    if (paymentUpdateError) {
+      console.error("Erro ao atualizar pagamento com checkout:", paymentUpdateError);
+
+      return res.status(500).json({
+        error: "Checkout criado, mas não foi possível salvar os dados no banco.",
+        details: paymentUpdateError.message
+      });
+    }
+
     return res.status(200).json({
       success: true,
-      checkoutUrl,
-      orderNsu
+      url: checkoutUrl,
+      slug: invoiceSlug,
+      order_nsu: orderNsu
     });
   } catch (error) {
+    console.error("Erro interno em create-checkout:", error);
+
     return res.status(500).json({
       error: error.message || "Erro interno"
     });

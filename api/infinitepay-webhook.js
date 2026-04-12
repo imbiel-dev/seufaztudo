@@ -1,6 +1,12 @@
 const { createClient } = require("@supabase/supabase-js");
 
 function isValidWebhookSecret(req) {
+  const configuredSecret = String(process.env.INFINITEPAY_WEBHOOK_SECRET || "").trim();
+
+  if (!configuredSecret) {
+    return true;
+  }
+
   const possibleSecrets = [
     req.headers["x-webhook-secret"],
     req.headers["x-infinitepay-secret"],
@@ -8,18 +14,16 @@ function isValidWebhookSecret(req) {
     req.headers["authorization"]
   ].filter(Boolean);
 
-  if (!process.env.INFINITEPAY_WEBHOOK_SECRET) {
-    return false;
-  }
-
   return possibleSecrets.some(value => {
     const normalized = String(value).replace(/^Bearer\s+/i, "").trim();
-    return normalized === process.env.INFINITEPAY_WEBHOOK_SECRET;
+    return normalized === configuredSecret;
   });
 }
 
 function normalizeStatus(value) {
   const status = String(value || "").toLowerCase().trim();
+
+  if (!status) return null;
 
   if ([
     "paid",
@@ -47,7 +51,7 @@ function normalizeStatus(value) {
     "chargeback"
   ].includes(status)) return "falhou";
 
-  return status || "desconhecido";
+  return status;
 }
 
 function pick(obj, paths) {
@@ -77,15 +81,44 @@ function addDays(baseDate, days) {
   return result;
 }
 
+function inferPaidFromWebhook(body) {
+  const receiptUrl = pick(body, [
+    "receipt_url",
+    "data.receipt_url",
+    "invoice.receipt_url",
+    "payment.receipt_url"
+  ]);
+
+  const transactionNsu = pick(body, [
+    "transaction_nsu",
+    "transactionNsu",
+    "data.transaction_nsu",
+    "invoice.transaction_nsu",
+    "payment.transaction_nsu",
+    "payment.id",
+    "id"
+  ]);
+
+  const invoiceSlug = pick(body, [
+    "invoice_slug",
+    "invoiceSlug",
+    "data.invoice_slug",
+    "invoice.slug",
+    "payment.invoice_slug",
+    "slug"
+  ]);
+
+  return !!(receiptUrl || transactionNsu || invoiceSlug);
+}
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método não permitido" });
   }
 
-    if (
+     if (
     !process.env.SUPABASE_URL ||
-    !process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    !process.env.INFINITEPAY_WEBHOOK_SECRET
+    !process.env.SUPABASE_SERVICE_ROLE_KEY
   ) {
     return res.status(500).json({
       error: "Variáveis de ambiente obrigatórias do webhook não configuradas."
@@ -117,7 +150,7 @@ module.exports = async (req, res) => {
       "metadata.orderNsu"
     ]);
 
-        const rawStatus = pick(body, [
+            const rawStatus = pick(body, [
       "status",
       "payment_status",
       "paymentStatus",
@@ -135,15 +168,41 @@ module.exports = async (req, res) => {
       "transactionNsu",
       "data.transaction_nsu",
       "invoice.transaction_nsu",
+      "payment.transaction_nsu",
       "payment.id",
       "id"
+    ]);
+
+    const invoiceSlug = pick(body, [
+      "invoice_slug",
+      "invoiceSlug",
+      "data.invoice_slug",
+      "invoice.slug",
+      "payment.invoice_slug",
+      "slug"
+    ]);
+
+    const receiptUrl = pick(body, [
+      "receipt_url",
+      "data.receipt_url",
+      "invoice.receipt_url",
+      "payment.receipt_url"
+    ]);
+
+    const captureMethod = pick(body, [
+      "capture_method",
+      "data.capture_method",
+      "invoice.capture_method",
+      "payment.capture_method"
     ]);
 
     if (!orderNsu) {
       return res.status(400).json({ error: "order_nsu não encontrado no payload" });
     }
 
-    const normalizedStatus = normalizeStatus(rawStatus);
+        const normalizedStatus =
+      normalizeStatus(rawStatus) ||
+      (inferPaidFromWebhook(body) ? "pago" : "pendente");
 
     const { data: pagamento, error: pagamentoError } = await supabase
       .from("pagamentos")
@@ -160,22 +219,27 @@ module.exports = async (req, res) => {
     }
 
     if (pagamento.status === "pago" && normalizedStatus === "pago") {
-  return res.status(200).json({
-    success: true,
-    orderNsu,
-    status: "pago",
-    duplicate: true
-  });
-}
-
-    const pagamentoUpdate = {
+      return res.status(200).json({
+        success: true,
+        orderNsu,
+        status: "pago",
+        duplicate: true
+      });
+    }
+        const pagamentoUpdate = {
       status: normalizedStatus,
       transacao_nsu: transactionNsu || pagamento.transacao_nsu || null,
-      raw_payload: body
+      transaction_nsu: transactionNsu || pagamento.transaction_nsu || null,
+      invoice_slug: invoiceSlug || pagamento.invoice_slug || null,
+      receipt_url: receiptUrl || pagamento.receipt_url || null,
+      capture_method: captureMethod || pagamento.capture_method || null,
+      raw_payload: body,
+      updated_at: new Date().toISOString()
     };
 
     if (normalizedStatus === "pago") {
-      pagamentoUpdate.pago_em = new Date().toISOString();
+      pagamentoUpdate.pago_em = pagamento.pago_em || new Date().toISOString();
+      pagamentoUpdate.paid_at = pagamento.paid_at || new Date().toISOString();
     }
 
     const { error: pagamentoUpdateError } = await supabase
@@ -200,9 +264,13 @@ module.exports = async (req, res) => {
 
       if (prestador) {
         if (pagamento.tipo === "boost") {
-          const base = prestador.boost_ate && new Date(prestador.boost_ate) > new Date()
-            ? new Date(prestador.boost_ate)
-            : new Date();
+          const now = new Date();
+          const currentBoostAte = prestador.boost_ate ? new Date(prestador.boost_ate) : null;
+
+          const base =
+            currentBoostAte && currentBoostAte > now
+              ? currentBoostAte
+              : now;
 
           const boostAte = addDays(base, pagamento.dias || 7);
 
@@ -210,7 +278,8 @@ module.exports = async (req, res) => {
             .from("prestadores")
             .update({
               boost_ativo: true,
-              boost_ate: boostAte.toISOString()
+              boost_ate: boostAte.toISOString(),
+              updated_at: new Date().toISOString()
             })
             .eq("id", prestador.id);
 
@@ -220,16 +289,21 @@ module.exports = async (req, res) => {
         }
 
         if (pagamento.tipo === "assinatura") {
-          const base = prestador.assinatura_ate && new Date(prestador.assinatura_ate) > new Date()
-            ? new Date(prestador.assinatura_ate)
-            : new Date();
+          const now = new Date();
+          const currentAssinaturaAte = prestador.assinatura_ate ? new Date(prestador.assinatura_ate) : null;
+
+          const base =
+            currentAssinaturaAte && currentAssinaturaAte > now
+              ? currentAssinaturaAte
+              : now;
 
           const assinaturaAte = addDays(base, pagamento.dias || 30);
 
           const { error } = await supabase
             .from("prestadores")
             .update({
-              assinatura_ate: assinaturaAte.toISOString()
+              assinatura_ate: assinaturaAte.toISOString(),
+              updated_at: new Date().toISOString()
             })
             .eq("id", prestador.id);
 
@@ -243,7 +317,9 @@ module.exports = async (req, res) => {
     return res.status(200).json({
       success: true,
       orderNsu,
-      status: normalizedStatus
+      status: normalizedStatus,
+      pagamento_tipo: pagamento.tipo,
+      prestador_id: pagamento.prestador_id
     });
   } catch (error) {
     return res.status(500).json({

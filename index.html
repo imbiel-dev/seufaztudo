@@ -120,7 +120,7 @@
           <div class="field">
             <label for="loginPassword">Senha</label>
             <div class="password-wrap">
-              <input id="loginPassword" type="password" placeholder="Sua senha" required />
+              <input id="loginPassword" type="password" placeholder="Sua senha" autocomplete="current-password" required />
               <button type="button" class="password-toggle" data-toggle-password="loginPassword">Mostrar</button>
             </div>
           </div>
@@ -159,7 +159,7 @@
             <div class="field">
               <label for="registerPassword">Senha</label>
               <div class="password-wrap">
-                <input id="registerPassword" type="password" placeholder="Crie uma senha" required />
+                <input id="registerPassword" type="password" placeholder="Crie uma senha" autocomplete="new-password" required />
                 <button type="button" class="password-toggle" data-toggle-password="registerPassword">Mostrar</button>
               </div>
             </div>
@@ -167,7 +167,7 @@
             <div class="field">
               <label for="registerPasswordConfirm">Confirme sua senha</label>
               <div class="password-wrap">
-                <input id="registerPasswordConfirm" type="password" placeholder="Digite a senha novamente" required />
+                <input id="registerPasswordConfirm" type="password" placeholder="Digite a senha novamente" autocomplete="new-password" required />
                 <button type="button" class="password-toggle" data-toggle-password="registerPasswordConfirm">Mostrar</button>
               </div>
             </div>
@@ -301,8 +301,8 @@
           <p id="planMessage" class="muted">Carregando status do plano...</p>
 
           <div class="actions">
-            <button id="btnBuyBoost" class="btn" type="button">Comprar boost 7 dias • R$ 4,99</button>
-            <button id="btnBuySubscription" class="btn btn-secondary" type="button">Assinar 30 dias • R$ 9,99</button>
+            <button id="btnBoost" class="btn" type="button">Comprar boost 7 dias • R$ 4,99</button>
+            <button id="btnSubscription" class="btn btn-secondary" type="button">Assinar 30 dias • R$ 9,99</button>
             <button id="btnRefreshPlan" class="btn btn-secondary" type="button">Atualizar status</button>
           </div>
         </div>
@@ -435,7 +435,7 @@
           <div class="field">
             <label for="newPassword">Nova senha</label>
             <div class="password-wrap">
-              <input id="newPassword" type="password" placeholder="Nova senha" required />
+              <input id="newPassword" type="password" autocomplete="new-password" />
               <button type="button" class="password-toggle" data-toggle-password="newPassword">Mostrar</button>
             </div>
           </div>
@@ -443,7 +443,7 @@
           <div class="field">
             <label for="confirmNewPassword">Confirme a nova senha</label>
             <div class="password-wrap">
-              <input id="confirmNewPassword" type="password" placeholder="Digite novamente" required />
+              <input id="confirmNewPassword" type="password" autocomplete="new-password" />
               <button type="button" class="password-toggle" data-toggle-password="confirmNewPassword">Mostrar</button>
             </div>
           </div>
