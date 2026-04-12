@@ -663,29 +663,36 @@ async function getPendingProviderProfileFromAuthMetadata() {
 }
 
 async function clearPendingProviderProfileFromAuthMetadata() {
-  if (!supabase) return;
+  if (!supabase) return false;
 
   const {
     data: { session }
   } = await supabase.auth.getSession();
 
-  if (!session?.user) return;
+  if (!session?.user) return false;
 
   const currentMetadata = session.user.user_metadata || {};
 
   if (!Object.prototype.hasOwnProperty.call(currentMetadata, "pending_provider_profile")) {
-    return;
+    return false;
   }
 
   const { pending_provider_profile, ...metadataWithoutPending } = currentMetadata;
 
-  const { error } = await supabase.auth.updateUser({
-    data: metadataWithoutPending
-  });
+  try {
+    const { error } = await supabase.auth.updateUser({
+      data: metadataWithoutPending
+    });
 
-  if (error) {
+    if (error) {
+      console.error("Erro ao limpar metadata pendente:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
     console.error("Erro ao limpar metadata pendente:", error);
-    throw error;
+    return false;
   }
 }
 
@@ -2092,9 +2099,14 @@ function bindChangePassword() {
     const { error } = response;
 
     if (error) {
-      console.error("Erro ao atualizar senha:", error);
-      throw error;
-    }
+  console.error("Erro ao atualizar senha:", error);
+
+  if (String(error.message || "").toLowerCase().includes("rate limit")) {
+    throw new Error("Muitas tentativas em pouco tempo. Aguarde cerca de 1 a 2 minutos e tente novamente.");
+  }
+
+  throw error;
+}
 
     $("newPassword").value = "";
     $("confirmNewPassword").value = "";
@@ -3329,9 +3341,6 @@ async function handleAuthenticatedUser(event, options = {}) {
 
   if (!state.currentUser) return;
 
-  await loadMyProvider(true);
-  initRealtime();
-
   if (event === "PASSWORD_RECOVERY") {
     state.isPasswordRecoveryMode = true;
     navigate("dashboard");
@@ -3349,6 +3358,9 @@ async function handleAuthenticatedUser(event, options = {}) {
     updateDashboardUI();
     return;
   }
+
+  await loadMyProvider(true);
+  initRealtime();
 
   redirectAfterAuth({ silent: silentRedirect });
 }
