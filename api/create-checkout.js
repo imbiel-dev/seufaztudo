@@ -82,10 +82,10 @@ module.exports = async (req, res) => {
     }
 
     const { data: prestador, error: prestadorError } = await supabase
-      .from("prestadores")
-      .select("id, user_id, nome, bloqueado")
-      .eq("id", prestadorId)
-      .maybeSingle();
+    .from("prestadores")
+    .select("id, user_id, nome, email, whatsapp, bloqueado")
+    .eq("id", prestadorId)
+    .maybeSingle();
 
     if (prestadorError) {
       return res.status(500).json({ error: prestadorError.message });
@@ -135,23 +135,41 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: insertError.message });
     }
 
-    const payload = {
-      handle: INFINITEPAY_HANDLE,
-      items: [
-        {
-          quantity: 1,
-          price: valorCentavos,
-          description: descricao
-        }
-      ],
-      order_nsu: orderNsu,
-      redirect_url: `${APP_BASE_URL}/?pagamento=sucesso&order_nsu=${orderNsu}`,
-      webhook_url: `${APP_BASE_URL}/api/infinitepay-webhook`,
-      customer: {
-        name: nomePrestador || prestador.nome || "Prestador seufaztudo",
-        email: emailPrestador || authData.user.email || ""
+   const telefoneSomenteDigitos = String(prestador?.whatsapp || "")
+  .replace(/\D/g, "")
+  .replace(/^55/, "");
+
+  const customerName = String(
+    nomePrestador || prestador?.nome || "Prestador seufaztudo"
+  ).trim();
+
+  const customerEmail = String(
+    emailPrestador || prestador?.email || authData.user.email || ""
+  ).trim();
+
+  const payload = {
+    handle: INFINITEPAY_HANDLE,
+    items: [
+      {
+        quantity: 1,
+        price: valorCentavos,
+        description: descricao
       }
-    };
+    ],
+    order_nsu: orderNsu,
+    redirect_url: `${APP_BASE_URL}/?pagamento=sucesso&order_nsu=${encodeURIComponent(orderNsu)}`,
+    webhook_url: `${APP_BASE_URL}/api/infinitepay-webhook`,
+    customer: {
+      name: customerName,
+      email: customerEmail,
+      phone: telefoneSomenteDigitos || undefined
+    },
+    metadata: {
+      prestador_id: prestadorId,
+      tipo,
+      order_nsu: orderNsu
+    }
+  };
 
     const response = await fetch("https://api.infinitepay.io/invoices/public/checkout/links", {
       method: "POST",

@@ -652,25 +652,6 @@ function updatePublicRatingSelector() {
   }
 }
 
-async function savePendingProviderProfileInAuthMetadata(payload) {
-  if (!supabase || !payload) return;
-
-  const {
-    data: { session }
-  } = await supabase.auth.getSession();
-
-  if (!session?.user) return;
-
-  const currentMetadata = session.user.user_metadata || {};
-
-  await supabase.auth.updateUser({
-    data: {
-      ...currentMetadata,
-      pending_provider_profile: payload
-    }
-  });
-}
-
 async function getPendingProviderProfileFromAuthMetadata() {
   if (!supabase) return null;
 
@@ -690,12 +671,22 @@ async function clearPendingProviderProfileFromAuthMetadata() {
 
   if (!session?.user) return;
 
-  const metadata = { ...(session.user.user_metadata || {}) };
-  delete metadata.pending_provider_profile;
+  const currentMetadata = session.user.user_metadata || {};
 
-  await supabase.auth.updateUser({
-    data: metadata
+  if (!Object.prototype.hasOwnProperty.call(currentMetadata, "pending_provider_profile")) {
+    return;
+  }
+
+  const { pending_provider_profile, ...metadataWithoutPending } = currentMetadata;
+
+  const { error } = await supabase.auth.updateUser({
+    data: metadataWithoutPending
   });
+
+  if (error) {
+    console.error("Erro ao limpar metadata pendente:", error);
+    throw error;
+  }
 }
 
 function sanitizeProviderInsertPayload(payload, userId) {
@@ -1757,7 +1748,6 @@ function bindRegister() {
       refreshAuthUI();
 
       if (session?.user?.id) {
-        await savePendingProviderProfileInAuthMetadata(pendingProfile);
         await loadMyProvider(true);
       } else {
         state.currentProviderProfile = null;
