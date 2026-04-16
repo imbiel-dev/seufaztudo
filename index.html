@@ -109,8 +109,7 @@
     <section class="screen" id="screen-login">
       <div class="card auth-card">
         <h3>Entrar</h3>
-        <p class="muted">Entre com seu e-mail e senha. Se você acabou de confirmar o e-mail, sua entrada será reconhecida automaticamente.</p>
-
+       <p class="muted">Entre com seu e-mail e senha. Se você acabou de confirmar o e-mail, sua entrada será reconhecida automaticamente. Se não encontrar a mensagem enviada, confira também spam, lixo eletrônico ou promoções.</p>
         <form id="formLogin">
           <div class="field">
             <label for="loginEmail">Email</label>
@@ -129,9 +128,13 @@
             <button type="submit" class="btn w-full">Entrar</button>
           </div>
 
-          <div class="auth-links">
+                    <div class="auth-links">
             <button type="button" id="btnForgotPassword" class="link-btn">Esqueci minha senha</button>
           </div>
+
+          <p class="small-muted auth-email-tip">
+            Dica: e-mails de confirmação ou recuperação podem cair em spam, lixo eletrônico ou promoções.
+          </p>
         </form>
       </div>
     </section>
@@ -243,9 +246,9 @@
           </div>
 
           <div class="card info-card">
-            <p class="small-muted">
-              Após concluir o cadastro, confirme sua conta no link enviado para o seu e-mail. Depois disso, seu acesso será reconhecido automaticamente e seu perfil poderá ser finalizado no dashboard.
-            </p>
+           <p class="small-muted">
+  Após concluir o cadastro, confirme sua conta no link enviado para o seu e-mail. Se a mensagem não aparecer na caixa de entrada em alguns minutos, verifique também spam, lixo eletrônico ou promoções. Depois disso, seu acesso será reconhecido automaticamente e seu perfil poderá ser finalizado no dashboard.
+</p>
           </div>
 
           <label class="check">

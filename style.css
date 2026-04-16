@@ -175,6 +175,12 @@ body.topbar-scrolled .topbar {
   justify-content: center;
 }
 
+.auth-email-tip {
+  margin-top: 12px;
+  text-align: center;
+  line-height: 1.5;
+}
+
 .link-btn {
   border: none;
   background: transparent;
@@ -780,12 +786,16 @@ body.topbar-scrolled .topbar {
   gap: 18px;
 }
 
-.public-profile-header {
-  background: linear-gradient(135deg, #1F4B5C, #3CB179);
-  color: white;
-  border-radius: 24px;
-  padding: 28px;
-  box-shadow: 0 14px 34px rgba(0,0,0,0.10);
+.public-profile-top-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.public-profile-top-tags .badge {
+  border: 1px solid rgba(255,255,255,0.12);
 }
 
 .public-profile-header h2 {

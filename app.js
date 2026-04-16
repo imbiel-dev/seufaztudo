@@ -504,6 +504,113 @@ async function withRequestTimeout(promise, timeoutMs, timeoutMessage) {
   }
 }
 
+async function syncCurrentProviderPaymentStatus(options = {}) {
+  const {
+    button = null,
+    loadingText = "Atualizando...",
+    showAlerts = true
+  } = options;
+
+  try {
+    if (button) {
+      setButtonLoading(button, true, loadingText);
+    }
+
+    if (!supabase) {
+      throw new Error("Supabase não configurado corretamente.");
+    }
+
+    if (!state.currentUser) {
+      throw new Error("Faça login novamente.");
+    }
+
+    if (!state.currentProviderProfile?.id) {
+      await loadMyProvider(true);
+    }
+
+    if (!state.currentProviderProfile?.id) {
+      throw new Error("Seu perfil de prestador não foi encontrado.");
+    }
+
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
+
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      throw new Error("Sua sessão expirou. Entre novamente.");
+    }
+
+    const response = await withRequestTimeout(
+      fetch("/api/check-payment-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          prestadorId: state.currentProviderProfile.id
+        })
+      }),
+      20000,
+      "A atualização do status demorou demais. Tente novamente."
+    );
+
+    const rawText = await response.text();
+
+    let result = null;
+    try {
+      result = rawText ? JSON.parse(rawText) : null;
+    } catch (_error) {
+      result = { raw: rawText };
+    }
+
+    if (!response.ok) {
+      console.error("Erro ao sincronizar pagamentos:", result);
+      throw new Error(
+        result?.error ||
+        result?.details ||
+        "Não foi possível atualizar o status do plano."
+      );
+    }
+
+    state.currentProviderProfile = result?.profile || state.currentProviderProfile;
+
+    await fetchProviders();
+    updateDashboardUI();
+
+    if (showAlerts) {
+      const checked = Number(result?.checked || 0);
+      const profile = result?.profile || state.currentProviderProfile;
+
+      const assinaturaAtiva =
+        !!profile?.assinatura_ate &&
+        new Date(profile.assinatura_ate) > new Date();
+
+      const boostAtivo = isBoostActive(profile);
+
+      if (checked > 0) {
+        showAlert("Status sincronizado com a InfinitePay com sucesso.", "success");
+      } else if (assinaturaAtiva || boostAtivo) {
+        showAlert("Seu pagamento já foi confirmado e o painel foi atualizado.", "success");
+      } else {
+        showAlert("Nenhum pagamento pendente precisou de sincronização.", "info");
+      }
+    }
+
+    return result;
+  } catch (error) {
+    if (showAlerts) {
+      showAlert(error.message || "Erro ao atualizar status do plano.", "error");
+    }
+    throw error;
+  } finally {
+    if (button) {
+      setButtonLoading(button, false);
+    }
+  }
+}
+
 async function startCheckoutFlow(tipo) {
   if (!supabase) {
     throw new Error("Supabase não configurado corretamente.");
@@ -559,13 +666,18 @@ async function startCheckoutFlow(tipo) {
     result = { raw: rawText };
   }
 
-  if (!response.ok) {
+    if (!response.ok) {
     console.error("Erro ao criar checkout:", result);
-    throw new Error(
+
+    const detailedMessage =
       result?.error ||
       result?.details ||
-      "Não foi possível criar o checkout."
-    );
+      result?.infinitepay_response?.message ||
+      result?.infinitepay_response?.error ||
+      result?.infinitepay_response?.details ||
+      "Não foi possível criar o checkout.";
+
+    throw new Error(detailedMessage);
   }
 
   if (!result?.url) {
@@ -632,24 +744,76 @@ function markPublicRatedProvider(providerId, nota) {
   localStorage.setItem(PUBLIC_RATING_STORAGE_KEY, JSON.stringify(ratings));
 }
 
-function updatePublicRatingSelector() {
-  const buttons = document.querySelectorAll("[data-public-rating-value]");
-  if (!buttons.length) return;
+function applyProviderRatingLocally(prestadorId, roundedMedia) {
+  const providerId = String(prestadorId);
+  const numericRating = Number(roundedMedia || 0);
 
-  buttons.forEach(button => {
-    const value = Number(button.getAttribute("data-public-rating-value"));
-    const isActive = value === state.publicRatingValue;
-
-    button.classList.toggle("active", isActive);
-    button.setAttribute("aria-pressed", isActive ? "true" : "false");
-  });
-
-  const selectedText = $("publicRatingSelectedText");
-  if (selectedText) {
-    selectedText.textContent = state.publicRatingValue
-      ? `Nota selecionada: ${state.publicRatingValue}`
-      : "Selecione uma nota de 1 a 5";
+  if (state.currentProviderProfile && String(state.currentProviderProfile.id) === providerId) {
+    state.currentProviderProfile.avaliacao_media = numericRating;
   }
+
+  const providerIndex = state.providers.findIndex(item => String(item.id) === providerId);
+  if (providerIndex >= 0) {
+    state.providers[providerIndex].avaliacao_media = numericRating;
+  }
+
+  const statRating = $("statRating");
+  if (statRating && state.currentProviderProfile && String(state.currentProviderProfile.id) === providerId) {
+    statRating.textContent = numericRating.toFixed(1);
+  }
+}
+
+async function recalculateProviderRating(prestadorId) {
+  const { data: ratings, error: ratingsError } = await supabase
+    .from("avaliacoes")
+    .select("nota")
+    .eq("prestador_id", prestadorId);
+
+  if (ratingsError) {
+    throw ratingsError;
+  }
+
+  const media =
+    Array.isArray(ratings) && ratings.length > 0
+      ? ratings.reduce((acc, item) => acc + Number(item.nota || 0), 0) / ratings.length
+      : 0;
+
+  const roundedMedia = Number(media.toFixed(1));
+
+  const { error: updateRatingError } = await supabase
+    .from("prestadores")
+    .update({ avaliacao_media: roundedMedia })
+    .eq("id", prestadorId);
+
+  if (updateRatingError) {
+    throw updateRatingError;
+  }
+
+  applyProviderRatingLocally(prestadorId, roundedMedia);
+  return roundedMedia;
+}
+
+function mapRatingErrorMessage(error) {
+  const raw = String(error?.message || error || "").trim();
+  const normalized = raw.toLowerCase();
+
+  if (!raw) {
+    return "Erro ao enviar avaliação.";
+  }
+
+  if (
+    normalized.includes("row-level security") ||
+    normalized.includes("permission denied") ||
+    normalized.includes("not allowed")
+  ) {
+    return "A avaliação foi bloqueada por permissão do banco. Precisamos ajustar o RLS da tabela de avaliações e da tabela de prestadores.";
+  }
+
+  if (normalized.includes("duplicate")) {
+    return "Esta avaliação já foi registrada.";
+  }
+
+  return raw;
 }
 
 async function getPendingProviderProfileFromAuthMetadata() {
@@ -846,8 +1010,8 @@ function updatePasswordRecoveryUI() {
 
   box.classList.toggle("hidden", !state.isPasswordRecoveryMode);
 
-  if (state.isPasswordRecoveryMode) {
-    box.textContent = "Seu link de recuperação foi validado. Defina sua nova senha abaixo para concluir o processo.";
+    if (state.isPasswordRecoveryMode) {
+    box.textContent = "Seu link de recuperação foi validado. Defina sua nova senha abaixo para concluir o processo. Se você abriu este link pelo e-mail, pode continuar normalmente.";
   }
 }
 
@@ -862,8 +1026,8 @@ function mapAuthErrorMessage(error) {
     return "Ocorreu um erro de autenticação.";
   }
 
-  if (normalized.includes("email not confirmed")) {
-    return "Seu e-mail ainda não foi confirmado. Abra a mensagem enviada para sua caixa de entrada e clique no link de confirmação.";
+    if (normalized.includes("email not confirmed")) {
+    return "Seu e-mail ainda não foi confirmado. Abra a mensagem enviada, confira também spam, lixo eletrônico e promoções, e clique no link de confirmação.";
   }
 
   if (normalized.includes("invalid login credentials")) {
@@ -1224,10 +1388,10 @@ function renderProviders(list) {
 
     const badges = fragment.querySelector(".provider-badges");
 
-    if (isBoostActive(provider)) {
+        if (isBoostActive(provider)) {
       const badge = document.createElement("span");
       badge.className = "badge badge-boost";
-      badge.textContent = "Boost";
+      badge.textContent = "Boost ativo";
       badges.appendChild(badge);
     }
 
@@ -1571,7 +1735,7 @@ function bindLogin() {
       throw error;
     }
 
-    showAlert("E-mail de recuperação enviado. Verifique sua caixa de entrada.", "success");
+        showAlert("E-mail de recuperação enviado. Verifique sua caixa de entrada e também spam, lixo eletrônico ou promoções.", "success");
   } catch (error) {
     console.error(error);
     showAlert("Erro ao enviar e-mail de recuperação.", "error");
@@ -2172,87 +2336,19 @@ function bindPayments() {
   }
 });
 
-    $("btnRefreshPlan")?.addEventListener("click", async () => {
-  const button = $("btnRefreshPlan");
+  $("btnRefreshPlan")?.addEventListener("click", async () => {
+    const button = $("btnRefreshPlan");
 
-  try {
-    setButtonLoading(button, true, "Atualizando...");
-
-    if (!supabase) {
-      throw new Error("Supabase não configurado corretamente.");
-    }
-
-    if (!state.currentUser) {
-      throw new Error("Faça login novamente.");
-    }
-
-    if (!state.currentProviderProfile?.id) {
-      await loadMyProvider(true);
-    }
-
-    if (!state.currentProviderProfile?.id) {
-      throw new Error("Seu perfil de prestador não foi encontrado.");
-    }
-
-    const {
-      data: { session }
-    } = await supabase.auth.getSession();
-
-    const accessToken = session?.access_token;
-    if (!accessToken) {
-      throw new Error("Sua sessão expirou. Entre novamente.");
-    }
-
-    const response = await withRequestTimeout(
-      fetch("/api/check-payment-status", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          prestadorId: state.currentProviderProfile.id
-        })
-      }),
-      20000,
-      "A atualização do status demorou demais. Tente novamente."
-    );
-
-    const rawText = await response.text();
-
-    let result = null;
     try {
-      result = rawText ? JSON.parse(rawText) : null;
-    } catch (_error) {
-      result = { raw: rawText };
+      await syncCurrentProviderPaymentStatus({
+        button,
+        loadingText: "Atualizando...",
+        showAlerts: true
+      });
+    } catch (error) {
+      console.error(error);
     }
-
-    if (!response.ok) {
-      console.error("Erro ao sincronizar pagamentos:", result);
-      throw new Error(
-        result?.error ||
-        result?.details ||
-        "Não foi possível atualizar o status do plano."
-      );
-    }
-
-    state.currentProviderProfile = result?.profile || state.currentProviderProfile;
-    updateDashboardUI();
-
-    const checked = Number(result?.checked || 0);
-
-    if (checked > 0) {
-      showAlert("Status sincronizado com a InfinitePay com sucesso.", "success");
-    } else {
-      showAlert("Nenhum pagamento pendente precisou de sincronização.", "info");
-    }
-  } catch (error) {
-    console.error(error);
-    showAlert(error.message || "Erro ao atualizar status do plano.", "error");
-  } finally {
-    setButtonLoading(button, false);
-  }
-});
+  });
 }
 
 async function startCheckout(tipo) {
@@ -2573,6 +2669,7 @@ function updateDashboardUI() {
   const statRating = $("statRating");
   const statPlan = $("statPlan");
   const planMessage = $("planMessage");
+  const btnBoost = $("btnBoost");
   const providerUrgentCallsList = $("providerUrgentCallsList");
 
   if (!profile) {
@@ -2594,6 +2691,10 @@ function updateDashboardUI() {
       planMessage.textContent = logged
         ? "Sua conta está autenticada. Assim que o perfil de prestador for localizado ou finalizado, o status do seu plano aparecerá aqui."
         : "Faça login para ver o status do plano.";
+    }
+    if (btnBoost) {
+      btnBoost.textContent = "Comprar boost 7 dias • R$ 4,99";
+      btnBoost.disabled = !logged;
     }
     if (providerUrgentCallsList) providerUrgentCallsList.innerHTML = "";
 
@@ -2656,13 +2757,25 @@ function updateDashboardUI() {
     partes.push("Você está no plano gratuito no momento, sem assinatura ativa.");
   }
 
-  if (boostAtivo) {
+    if (boostAtivo) {
     partes.push(`Boost ativo${profile.boost_ate ? ` até ${formatDateTimeBR(profile.boost_ate)}` : ""}.`);
   } else {
     partes.push("Boost inativo. Você pode ativar destaque por 7 dias quando quiser.");
   }
 
   if (planMessage) planMessage.textContent = partes.join(" ");
+
+  if (btnBoost) {
+    if (boostAtivo) {
+      btnBoost.textContent = profile.boost_ate
+        ? `Boost ativo até ${formatDateTimeBR(profile.boost_ate)}`
+        : "Boost ativo";
+      btnBoost.disabled = true;
+    } else {
+      btnBoost.textContent = "Comprar boost 7 dias • R$ 4,99";
+      btnBoost.disabled = false;
+    }
+  }
 
   $("btnToggleEditProfile")?.classList.remove("hidden");
 
@@ -3100,17 +3213,66 @@ async function processPaymentReturn() {
 
   if (!pagamento) return;
 
-  if (pagamento === "sucesso") {
-  showAlert(
-    orderNsu
-      ? `Pagamento concluído. Pedido: ${orderNsu}. Clique em "Atualizar status" para confirmar e ativar o benefício no painel.`
-      : `Pagamento concluído. Clique em "Atualizar status" para confirmar e ativar o benefício no painel.`,
-    "success"
-  );
-} else if (pagamento === "cancelado") {
-    showAlert("O pagamento foi cancelado.", "info");
-  } else {
-    showAlert("Retorno do pagamento identificado.", "info");
+  try {
+    if (pagamento === "sucesso") {
+      if (!state.currentUser) {
+        showAlert(
+          orderNsu
+            ? `Pagamento concluído. Pedido: ${orderNsu}. Faça login para atualizar seu painel automaticamente.`
+            : "Pagamento concluído. Faça login para atualizar seu painel automaticamente.",
+          "info"
+        );
+        return;
+      }
+
+      if (!state.currentProviderProfile?.id) {
+        await loadMyProvider(true);
+      }
+
+      navigate("dashboard");
+
+      await syncCurrentProviderPaymentStatus({
+        showAlerts: false
+      });
+
+      const profile = state.currentProviderProfile;
+
+      const assinaturaAtiva =
+        !!profile?.assinatura_ate &&
+        new Date(profile.assinatura_ate) > new Date();
+
+      const boostAtivo = isBoostActive(profile);
+
+      if (assinaturaAtiva || boostAtivo) {
+        showAlert(
+          orderNsu
+            ? `Pagamento confirmado com sucesso. Pedido: ${orderNsu}. Seu painel já foi atualizado.`
+            : "Pagamento confirmado com sucesso. Seu painel já foi atualizado.",
+          "success"
+        );
+      } else {
+        showAlert(
+          orderNsu
+            ? `Pagamento identificado. Pedido: ${orderNsu}. Ainda aguardando confirmação final da InfinitePay.`
+            : "Pagamento identificado. Ainda aguardando confirmação final da InfinitePay.",
+          "info"
+        );
+      }
+    } else if (pagamento === "cancelado") {
+      showAlert("O pagamento foi cancelado.", "info");
+    } else {
+      showAlert("Retorno do pagamento identificado.", "info");
+    }
+  } catch (error) {
+    console.error("Erro no retorno do pagamento:", error);
+    showAlert(
+      error.message || "Não foi possível atualizar automaticamente o status do pagamento.",
+      "error"
+    );
+  } finally {
+    url.searchParams.delete("pagamento");
+    url.searchParams.delete("order_nsu");
+    window.history.replaceState({}, document.title, url.pathname + url.search);
   }
 }
 
@@ -3218,10 +3380,57 @@ function initRealtime() {
     )
     .subscribe();
 
+    const channelProviders = supabase
+    .channel("prestadores-realtime")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "prestadores"
+      },
+      async payload => {
+        const changedProvider = payload.new || payload.old;
+        if (!changedProvider?.id) return;
+
+        const changedProviderId = String(changedProvider.id);
+
+        const providerIndex = state.providers.findIndex(
+          provider => String(provider.id) === changedProviderId
+        );
+
+        if (providerIndex >= 0 && payload.new) {
+          state.providers[providerIndex] = {
+            ...state.providers[providerIndex],
+            ...payload.new
+          };
+        }
+
+        if (
+          state.currentProviderProfile &&
+          String(state.currentProviderProfile.id) === changedProviderId &&
+          payload.new
+        ) {
+          state.currentProviderProfile = {
+            ...state.currentProviderProfile,
+            ...payload.new
+          };
+          updateDashboardUI();
+        }
+
+        const prestadorParam = new URL(window.location.href).searchParams.get("prestador");
+        if (prestadorParam && String(prestadorParam) === changedProviderId) {
+          await loadPublicProfile();
+        }
+      }
+    )
+    .subscribe();
+
   state.realtimeChannels.push(
     channelUrgentRecipients,
     channelResponses,
-    channelStatus
+    channelStatus,
+    channelProviders
   );
 }
 
@@ -3448,9 +3657,10 @@ async function loadPublicProfile() {
     return;
   }
 
-  await incrementProviderViews(data.id);
+    await incrementProviderViews(data.id);
 
   const services = getProviderServices(data);
+  const boostAtivo = isBoostActive(data);
   const whatsappLink = toWhatsappLink(
     data.whatsapp,
     `Olá ${data.nome || ""}, encontrei seu perfil no seufaztudo e gostaria de solicitar um orçamento.`
@@ -3463,7 +3673,11 @@ async function loadPublicProfile() {
     <article class="public-profile-card">
       <div class="public-profile-header">
         <div>
-          <span class="tag">Prestador verificado na plataforma</span>
+          <div class="public-profile-top-tags">
+            <span class="tag">Prestador verificado na plataforma</span>
+            ${boostAtivo ? `<span class="badge badge-boost">Boost ativo</span>` : ``}
+            ${data.atende_emergencia ? `<span class="badge badge-emergency">Emergência</span>` : ``}
+          </div>
           <h2>${escapeHtml(data.nome || "Prestador")}</h2>
           <p class="public-profile-services">${escapeHtml(services.join(", ") || "Serviço não informado")}</p>
         </div>
@@ -3563,14 +3777,19 @@ async function loadPublicProfile() {
 
   updatePublicRatingSelector();
 
-  const submitRatingBtn = $("btnSubmitPublicRating");
+    const submitRatingBtn = $("btnSubmitPublicRating");
   if (submitRatingBtn) {
     submitRatingBtn.addEventListener("click", async () => {
-      await avaliarPrestador(data.id, {
-        publicMode: true,
-        notaDireta: state.publicRatingValue
-      });
-      await loadPublicProfile();
+      submitRatingBtn.disabled = true;
+
+      try {
+        await avaliarPrestador(data.id, {
+          publicMode: true,
+          notaDireta: state.publicRatingValue
+        });
+      } finally {
+        submitRatingBtn.disabled = false;
+      }
     });
   }
 
@@ -3585,6 +3804,11 @@ async function avaliarPrestador(prestadorId, options = {}) {
 
   if (!prestadorId) {
     showAlert("Prestador inválido.", "error");
+    return;
+  }
+
+  if (!supabase) {
+    showAlert("Supabase não configurado corretamente.", "error");
     return;
   }
 
@@ -3616,77 +3840,41 @@ async function avaliarPrestador(prestadorId, options = {}) {
       insertPayload.chamado_id = state.myUrgentCallId;
     }
 
-    const { error } = await supabase
-      .from("avaliacoes")
-      .insert(insertPayload);
+    const { error: insertError } = await withRequestTimeout(
+      supabase
+        .from("avaliacoes")
+        .insert(insertPayload),
+      15000,
+      "O envio da avaliação demorou demais. Tente novamente."
+    );
 
-    if (error) {
-      console.error("Erro ao inserir avaliação:", error);
-      throw error;
+    if (insertError) {
+      throw insertError;
     }
 
-    const { data: ratings, error: ratingsError } = await supabase
-      .from("avaliacoes")
-      .select("nota")
-      .eq("prestador_id", prestadorId);
+    const roundedMedia = await withRequestTimeout(
+      recalculateProviderRating(prestadorId),
+      15000,
+      "A atualização da nota média demorou demais. Tente novamente."
+    );
 
-    if (ratingsError) throw ratingsError;
-
-    const media =
-      ratings.length > 0
-        ? ratings.reduce((acc, item) => acc + Number(item.nota || 0), 0) / ratings.length
-        : 0;
-
-    const roundedMedia = Number(media.toFixed(1));
-
-    const { error: updateRatingError } = await supabase
-      .from("prestadores")
-      .update({ avaliacao_media: roundedMedia })
-      .eq("id", prestadorId);
-
-    if (updateRatingError) throw updateRatingError;
-
-    const providerInState = state.providers.find(provider => provider.id === prestadorId);
-    if (providerInState) {
-      providerInState.avaliacao_media = roundedMedia;
-    }
-
-    if (state.currentProviderProfile?.id === prestadorId) {
-      state.currentProviderProfile.avaliacao_media = roundedMedia;
-      $("statRating") && ($("statRating").textContent = roundedMedia.toFixed(1));
-    }
+    applyProviderRatingLocally(prestadorId, roundedMedia);
+    updateDashboardUI();
 
     if (publicMode) {
       markPublicRatedProvider(prestadorId, nota);
       state.publicRatingValue = 0;
+      updatePublicRatingSelector();
       showAlert("Avaliação enviada com sucesso.", "success");
-      await fetchProviders();
       await loadPublicProfile();
       return;
     }
 
-    if (state.currentProviderProfile && String(state.currentProviderProfile.id) === String(prestadorId)) {
-      state.currentProviderProfile.avaliacao_media = roundedMedia;
-    }
-
-    const providerIndex = state.providers.findIndex(item => String(item.id) === String(prestadorId));
-    if (providerIndex >= 0) {
-      state.providers[providerIndex].avaliacao_media = roundedMedia;
-    }
-
-    if (publicMode) {
-      markPublicRatedProvider(prestadorId, nota);
-    }
-
-    await fetchProviders();
-    updateDashboardUI();
-
     showAlert("Avaliação enviada com sucesso.", "success");
-    await fetchProviders();
     await loadMyUrgentResponses();
   } catch (error) {
-    console.error(error);
-    showAlert(error.message || "Erro ao enviar avaliação.", "error");
+    console.error("Erro ao enviar avaliação:", error);
+    showAlert(mapRatingErrorMessage(error), "error");
   }
 }
 
@@ -3720,7 +3908,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupServiceAutocomplete("urgentService", "urgentServiceSuggestions", "urgentServiceHint");
   
   await restoreSession();
-  processPaymentReturn();
+  await processPaymentReturn();
 
   await loadPublicProfile();
 

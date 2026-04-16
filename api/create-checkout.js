@@ -1,6 +1,26 @@
 const { createClient } = require("@supabase/supabase-js");
 const crypto = require("crypto");
 
+function normalizePhoneForInfinitePay(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+
+  if (!digits) return null;
+
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+  }
+
+  if (!digits.startsWith("55")) {
+    digits = `55${digits}`;
+  }
+
+  if (digits.length < 12 || digits.length > 13) {
+    return null;
+  }
+
+  return `+${digits}`;
+}
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método não permitido" });
@@ -135,41 +155,49 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: insertError.message });
     }
 
-   const telefoneSomenteDigitos = String(prestador?.whatsapp || "")
-  .replace(/\D/g, "")
-  .replace(/^55/, "");
+       const customerPhone = normalizePhoneForInfinitePay(prestador?.whatsapp);
 
-  const customerName = String(
-    nomePrestador || prestador?.nome || "Prestador seufaztudo"
-  ).trim();
+    const customerName = String(
+      nomePrestador || prestador?.nome || "Prestador seufaztudo"
+    ).trim();
 
-  const customerEmail = String(
-    emailPrestador || prestador?.email || authData.user.email || ""
-  ).trim();
+    const customerEmail = String(
+      emailPrestador || prestador?.email || authData.user.email || ""
+    ).trim();
 
-  const payload = {
-    handle: INFINITEPAY_HANDLE,
-    items: [
-      {
-        quantity: 1,
-        price: valorCentavos,
-        description: descricao
-      }
-    ],
-    order_nsu: orderNsu,
-    redirect_url: `${APP_BASE_URL}/?pagamento=sucesso&order_nsu=${encodeURIComponent(orderNsu)}`,
-    webhook_url: `${APP_BASE_URL}/api/infinitepay-webhook`,
-    customer: {
-      name: customerName,
-      email: customerEmail,
-      phone: telefoneSomenteDigitos || undefined
-    },
-    metadata: {
-      prestador_id: prestadorId,
-      tipo,
-      order_nsu: orderNsu
+    const customer = {};
+
+    if (customerName) {
+      customer.name = customerName;
     }
-  };
+
+    if (customerEmail) {
+      customer.email = customerEmail;
+    }
+
+    if (customerPhone) {
+      customer.phone_number = customerPhone;
+    }
+
+    const payload = {
+      handle: INFINITEPAY_HANDLE,
+      items: [
+        {
+          quantity: 1,
+          price: valorCentavos,
+          description: descricao
+        }
+      ],
+      order_nsu: orderNsu,
+      redirect_url: `${APP_BASE_URL}/?pagamento=sucesso&order_nsu=${encodeURIComponent(orderNsu)}`,
+      webhook_url: `${APP_BASE_URL}/api/infinitepay-webhook`,
+      ...(Object.keys(customer).length ? { customer } : {}),
+      metadata: {
+        prestador_id: prestadorId,
+        tipo,
+        order_nsu: orderNsu
+      }
+    };
 
     const response = await fetch("https://api.infinitepay.io/invoices/public/checkout/links", {
       method: "POST",
@@ -188,19 +216,32 @@ module.exports = async (req, res) => {
       responseData = { raw: rawText };
     }
 
-    if (!response.ok) {
+        if (!response.ok) {
       console.error("Erro da InfinitePay ao criar checkout:", response.status, responseData);
+      console.error("Payload enviado para a InfinitePay:", payload);
 
       await supabase
         .from("pagamentos")
         .update({
           status: "falhou",
-          raw_payload: responseData
+          raw_payload: {
+            request_payload: payload,
+            response_payload: responseData,
+            response_status: response.status
+          }
         })
         .eq("order_nsu", orderNsu);
 
+      const infinitepayMessage =
+        responseData?.message ||
+        responseData?.error ||
+        responseData?.details ||
+        responseData?.title ||
+        (Array.isArray(responseData?.errors) ? responseData.errors.join(" | ") : null) ||
+        "Falha ao criar checkout na InfinitePay.";
+
       return res.status(response.status).json({
-        error: "Falha ao criar checkout na InfinitePay.",
+        error: infinitepayMessage,
         infinitepay_status: response.status,
         infinitepay_response: responseData
       });
