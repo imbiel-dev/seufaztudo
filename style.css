@@ -798,6 +798,29 @@ body.topbar-scrolled .topbar {
   border: 1px solid rgba(255,255,255,0.12);
 }
 
+.public-profile-header {
+  background: linear-gradient(135deg, #1F4B5C, #3CB179);
+  color: #ffffff;
+  border-radius: 22px;
+  padding: 28px 24px;
+  box-shadow: 0 14px 32px rgba(31, 75, 92, 0.18);
+}
+
+.public-profile-header .tag {
+  background: rgba(255,255,255,0.16);
+  color: #ffffff;
+}
+
+.public-profile-header .badge-boost {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fff4c2;
+}
+
+.public-profile-header .badge-emergency {
+  background: rgba(239, 68, 68, 0.22);
+  color: #ffe2e2;
+}
+
 .public-profile-header h2 {
   margin: 10px 0 8px;
   font-size: 2rem;

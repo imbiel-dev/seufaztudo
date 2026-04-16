@@ -1413,14 +1413,30 @@ function renderProviders(list) {
     }
 
     const viewProfileBtn = fragment.querySelector(".btn-view-profile");
-    viewProfileBtn.addEventListener("click", async () => {
-      const url = new URL(window.location.href);
-      url.searchParams.set("prestador", provider.id);
-      window.history.pushState({}, "", url);
+viewProfileBtn.addEventListener("click", async () => {
+  const url = new URL(window.location.href);
+  url.searchParams.set("prestador", provider.id);
+  window.history.pushState({}, "", url);
 
-      await incrementProviderViews(provider.id, { silent: true });
-      await loadPublicProfile();
-    });
+  navigate("provider-profile");
+
+  const profileContainer = $("publicProfileContainer");
+  if (profileContainer) {
+    profileContainer.innerHTML = `
+      <div class="card">
+        <h3>Carregando perfil...</h3>
+        <p class="muted">Estamos abrindo o perfil do prestador.</p>
+      </div>
+    `;
+  }
+
+  try {
+    await loadPublicProfile();
+  } catch (error) {
+    console.error("Erro ao abrir perfil público:", error);
+    showAlert("Não foi possível abrir o perfil do prestador.", "error");
+  }
+});
 
     const whatsappBtn = fragment.querySelector(".btn-whatsapp");
     whatsappBtn.href = toWhatsappLink(
@@ -2018,6 +2034,21 @@ function bindDashboard() {
     }
     addProfileAdditionalService();
   });
+
+  $("btnRefreshUrgentRequests")?.addEventListener("click", async () => {
+  const button = $("btnRefreshUrgentRequests");
+
+  try {
+    setButtonLoading(button, true, "Atualizando chamados...");
+    await loadProviderUrgentCalls();
+    showAlert("Chamados atualizados com sucesso.", "success");
+  } catch (error) {
+    console.error(error);
+    showAlert(error.message || "Erro ao atualizar chamados.", "error");
+  } finally {
+    setButtonLoading(button, false);
+  }
+});
 
   $("profileAdditionalService")?.addEventListener("keydown", event => {
     if (event.key === "Enter") {
@@ -3623,6 +3654,25 @@ async function restoreSession() {
       });
     }, 0);
   });
+}
+
+function updatePublicRatingSelector() {
+  const ratingButtons = document.querySelectorAll("[data-public-rating-value]");
+  const selectedText = $("publicRatingSelectedText");
+
+  ratingButtons.forEach(button => {
+    const value = Number(button.getAttribute("data-public-rating-value"));
+    const isActive = value === Number(state.publicRatingValue || 0);
+
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+
+  if (selectedText) {
+    selectedText.textContent = state.publicRatingValue
+      ? `Nota selecionada: ${state.publicRatingValue} de 5`
+      : "Selecione uma nota de 1 a 5";
+  }
 }
 
 

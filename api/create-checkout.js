@@ -21,6 +21,12 @@ function normalizePhoneForInfinitePay(value) {
   return `+${digits}`;
 }
 
+function isValidCheckoutEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+    String(value || "").trim().toLowerCase()
+  );
+}
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método não permitido" });
@@ -135,69 +141,68 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: "Tipo de cobrança inválido" });
     }
 
-    const orderNsu = `seufaztudo_${tipo}_${crypto.randomUUID()}`;
+    const safeHandle = String(INFINITEPAY_HANDLE || "").trim().replace(/^\$/, "");
 
-    const { error: insertError } = await supabase
-      .from("pagamentos")
-      .insert({
-        user_id: authenticatedUserId,
-        prestador_id: prestadorId,
-        tipo,
-        status: "pendente",
-        valor_centavos: valorCentavos,
-        dias,
-        order_nsu: orderNsu,
-        gateway: "infinitepay",
-        descricao
-      });
+if (!safeHandle) {
+  return res.status(500).json({ error: "INFINITEPAY_HANDLE inválido." });
+}
 
-    if (insertError) {
-      return res.status(500).json({ error: insertError.message });
+const orderNsu = `sftd_${tipo}_${Date.now()}`;
+
+const { error: insertError } = await supabase
+  .from("pagamentos")
+  .insert({
+    user_id: authenticatedUserId,
+    prestador_id: prestadorId,
+    tipo,
+    status: "pendente",
+    valor_centavos: valorCentavos,
+    dias,
+    order_nsu: orderNsu,
+    gateway: "infinitepay",
+    descricao
+  });
+
+if (insertError) {
+  return res.status(500).json({ error: insertError.message });
+}
+
+const customerPhone = normalizePhoneForInfinitePay(prestador?.whatsapp);
+
+const customerName = String(
+  nomePrestador || prestador?.nome || "Prestador seufaztudo"
+).trim();
+
+const customerEmail = String(
+  emailPrestador || prestador?.email || authData.user.email || ""
+).trim().toLowerCase();
+
+const payload = {
+  handle: safeHandle,
+  items: [
+    {
+      quantity: 1,
+      price: valorCentavos,
+      description: descricao
     }
+  ],
+  order_nsu: orderNsu,
+  redirect_url: `${APP_BASE_URL}/?pagamento=sucesso&order_nsu=${encodeURIComponent(orderNsu)}`,
+  webhook_url: `${APP_BASE_URL}/api/infinitepay-webhook`,
+  metadata: {
+    prestador_id: prestadorId,
+    tipo,
+    order_nsu: orderNsu
+  }
+};
 
-       const customerPhone = normalizePhoneForInfinitePay(prestador?.whatsapp);
-
-    const customerName = String(
-      nomePrestador || prestador?.nome || "Prestador seufaztudo"
-    ).trim();
-
-    const customerEmail = String(
-      emailPrestador || prestador?.email || authData.user.email || ""
-    ).trim();
-
-    const customer = {};
-
-    if (customerName) {
-      customer.name = customerName;
-    }
-
-    if (customerEmail) {
-      customer.email = customerEmail;
-    }
-
-    if (customerPhone) {
-      customer.phone_number = customerPhone;
-    }
-
-    const payload = {
-      handle: INFINITEPAY_HANDLE,
-      items: [
-        {
-          quantity: 1,
-          price: valorCentavos,
-          description: descricao
-        }
-      ],
-      order_nsu: orderNsu,
-      redirect_url: `${APP_BASE_URL}/?pagamento=sucesso&order_nsu=${encodeURIComponent(orderNsu)}`,
-      webhook_url: `${APP_BASE_URL}/api/infinitepay-webhook`,
-      ...(Object.keys(customer).length ? { customer } : {}),
-      metadata: {
-        prestador_id: prestadorId,
-        tipo,
-        order_nsu: orderNsu
-      }
-    };
+if (customerName && isValidCheckoutEmail(customerEmail) && customerPhone) {
+  payload.customer = {
+    name: customerName,
+    email: customerEmail,
+    phone_number: customerPhone
+  };
+}
 
     const response = await fetch("https://api.infinitepay.io/invoices/public/checkout/links", {
       method: "POST",
