@@ -628,6 +628,29 @@ async function startCheckoutFlow(tipo) {
     throw new Error("Seu perfil de prestador não foi encontrado.");
   }
 
+  const profile = state.currentProviderProfile;
+  const acessoAtivo = hasProviderActiveAccess(profile);
+  const promoLancamentoAtiva = isLaunchPromoActive(profile);
+  const assinaturaAtiva = isPaidSubscriptionActive(profile);
+
+  if (tipo === "assinatura") {
+    if (promoLancamentoAtiva) {
+      throw new Error(
+        `Você já está no período promocional gratuito até ${formatDateTimeBR(profile.assinatura_ate)}. Não é necessário comprar assinatura agora.`
+      );
+    }
+
+    if (assinaturaAtiva) {
+      throw new Error(
+        `Sua assinatura já está ativa até ${formatDateTimeBR(profile.assinatura_ate)}.`
+      );
+    }
+  }
+
+  if (tipo === "boost" && !acessoAtivo) {
+    throw new Error("O boost só pode ser comprado quando seu perfil estiver com acesso ativo.");
+  }
+
   const {
     data: { session }
   } = await supabase.auth.getSession();
@@ -639,9 +662,9 @@ async function startCheckoutFlow(tipo) {
 
   const payload = {
     tipo,
-    prestadorId: state.currentProviderProfile.id,
-    nomePrestador: state.currentProviderProfile.nome || state.currentUser.email || "Prestador",
-    emailPrestador: state.currentProviderProfile.email || state.currentUser.email || ""
+    prestadorId: profile.id,
+    nomePrestador: profile.nome || state.currentUser.email || "Prestador",
+    emailPrestador: profile.email || state.currentUser.email || ""
   };
 
   const response = await withRequestTimeout(
@@ -666,7 +689,7 @@ async function startCheckoutFlow(tipo) {
     result = { raw: rawText };
   }
 
-    if (!response.ok) {
+  if (!response.ok) {
     console.error("Erro ao criar checkout:", result);
 
     const detailedMessage =
@@ -1172,9 +1195,17 @@ function isBoostActive(provider) {
   return new Date(provider.boost_ate) > new Date();
 }
 
-function isLaunchPromoActive(provider) {
+function hasProviderActiveAccess(provider) {
   if (!provider?.assinatura_ate) return false;
   return new Date(provider.assinatura_ate) > new Date();
+}
+
+function isLaunchPromoActive(provider) {
+  return !!provider?.promo_lancamento && hasProviderActiveAccess(provider);
+}
+
+function isPaidSubscriptionActive(provider) {
+  return !provider?.promo_lancamento && hasProviderActiveAccess(provider);
 }
 
 function formatDateTimeBR(dateString) {
@@ -1302,7 +1333,10 @@ async function fetchProviders() {
     return;
   }
 
-  state.providers = (data || []).filter(provider => !provider.bloqueado);
+  state.providers = (data || []).filter(provider =>
+    !provider.bloqueado &&
+    hasProviderActiveAccess(provider)
+  );
 }
 
 function renderSearchEmptyState(mode = "initial", options = {}) {
@@ -1601,6 +1635,12 @@ async function handleSearchProviders() {
   }
 
   try {
+    await fetchProviders();
+
+    const activeProviderIds = new Set(
+      (state.providers || []).map(provider => String(provider.id))
+    );
+
     let results = null;
 
     if (
@@ -1616,6 +1656,7 @@ async function handleSearchProviders() {
 
       if (!rpcResponse.error && Array.isArray(rpcResponse.data)) {
         results = rpcResponse.data
+          .filter(provider => activeProviderIds.has(String(provider.id)))
           .map(provider => ({
             ...provider,
             distanceKm:
@@ -1634,18 +1675,8 @@ async function handleSearchProviders() {
       }
     }
 
-        if (!results) {
-      const { data, error } = await supabase
-        .from("prestadores")
-        .select("*");
-
-      if (error) {
-        console.error("Erro ao inserir avaliação:", error);
-        throw error;
-      }
-
-      results = (data || [])
-        .filter(provider => !provider.bloqueado)
+    if (!results) {
+      results = (state.providers || [])
         .filter(provider => providerMatchesService(provider, service))
         .map(provider => {
           let distanceKm = null;
@@ -2361,7 +2392,7 @@ function bindPayments() {
     throw new Error("A InfinitePay não retornou a URL do checkout.");
   } catch (error) {
     console.error(error);
-    showAlert(error.message || "Erro ao iniciar assinatura.", "error");
+    showAlert(error.message || "Não foi possível iniciar a assinatura.", "error");
   } finally {
     setButtonLoading(button, false);
   }
@@ -2701,6 +2732,8 @@ function updateDashboardUI() {
   const statPlan = $("statPlan");
   const planMessage = $("planMessage");
   const btnBoost = $("btnBoost");
+  const btnSubscription = $("btnSubscription");
+  const subscriptionStatusHint = $("subscriptionStatusHint");
   const providerUrgentCallsList = $("providerUrgentCallsList");
 
   if (!profile) {
@@ -2718,15 +2751,29 @@ function updateDashboardUI() {
     if (statWhatsapp) statWhatsapp.textContent = "0";
     if (statRating) statRating.textContent = "0.0";
     if (statPlan) statPlan.textContent = logged ? "Perfil em configuração" : "Sem login";
+
     if (planMessage) {
       planMessage.textContent = logged
         ? "Sua conta está autenticada. Assim que o perfil de prestador for localizado ou finalizado, o status do seu plano aparecerá aqui."
         : "Faça login para ver o status do plano.";
     }
+
     if (btnBoost) {
       btnBoost.textContent = "Comprar boost 7 dias • R$ 4,99";
       btnBoost.disabled = !logged;
     }
+
+    if (btnSubscription) {
+      btnSubscription.textContent = "Assinar 30 dias • R$ 9,99";
+      btnSubscription.disabled = !logged;
+    }
+
+    if (subscriptionStatusHint) {
+      subscriptionStatusHint.textContent = logged
+        ? "Assim que seu perfil estiver pronto, o sistema mostrará se você está em promoção, com assinatura ativa ou sem acesso."
+        : "";
+    }
+
     if (providerUrgentCallsList) providerUrgentCallsList.innerHTML = "";
 
     $("btnToggleEditProfile")?.classList.toggle("hidden", !profile);
@@ -2762,39 +2809,38 @@ function updateDashboardUI() {
   if (statWhatsapp) statWhatsapp.textContent = String(Number(profile.cliques_whatsapp || 0));
   if (statRating) statRating.textContent = Number(profile.avaliacao_media || 0).toFixed(1);
 
-  const now = new Date();
-  const acessoAtivo =
-  profile.assinatura_ate && new Date(profile.assinatura_ate) > now;
-
-  const promoLancamentoAtiva =
-    !!profile.promo_lancamento && acessoAtivo;
-
-  const assinaturaAtiva =
-    !profile.promo_lancamento && acessoAtivo;
-
+  const acessoAtivo = hasProviderActiveAccess(profile);
+  const promoLancamentoAtiva = isLaunchPromoActive(profile);
+  const assinaturaAtiva = isPaidSubscriptionActive(profile);
   const boostAtivo = isBoostActive(profile);
 
-  $("statPlan").textContent = assinaturaAtiva
-  ? "Assinatura ativa"
-  : (promoLancamentoAtiva ? "Promoção de lançamento" : "Plano gratuito");
+  if (statPlan) {
+    statPlan.textContent = assinaturaAtiva
+      ? "Assinatura ativa"
+      : (promoLancamentoAtiva ? "Promoção de lançamento" : "Sem acesso ativo");
+  }
 
   const partes = [];
 
   if (assinaturaAtiva) {
     partes.push(`Assinatura ativa até ${formatDateTimeBR(profile.assinatura_ate)}.`);
   } else if (promoLancamentoAtiva) {
-    partes.push(`Você está no período promocional gratuito até ${formatDateTimeBR(profile.assinatura_ate)}. Durante esse período, não é necessário contratar assinatura.`);
+    partes.push(`Você está no período promocional gratuito até ${formatDateTimeBR(profile.assinatura_ate)}. Não é necessário contratar assinatura agora.`);
   } else {
-    partes.push("Você está no plano gratuito no momento, sem assinatura ativa.");
+    partes.push("Seu perfil está sem acesso ativo no momento. Sem acesso ativo, ele não aparece para clientes na busca pública.");
   }
 
-    if (boostAtivo) {
+  if (boostAtivo) {
     partes.push(`Boost ativo${profile.boost_ate ? ` até ${formatDateTimeBR(profile.boost_ate)}` : ""}.`);
-  } else {
+  } else if (acessoAtivo) {
     partes.push("Boost inativo. Você pode ativar destaque por 7 dias quando quiser.");
+  } else {
+    partes.push("O boost só fica disponível quando seu perfil estiver com acesso ativo.");
   }
 
-  if (planMessage) planMessage.textContent = partes.join(" ");
+  if (planMessage) {
+    planMessage.textContent = partes.join(" ");
+  }
 
   if (btnBoost) {
     if (boostAtivo) {
@@ -2802,9 +2848,37 @@ function updateDashboardUI() {
         ? `Boost ativo até ${formatDateTimeBR(profile.boost_ate)}`
         : "Boost ativo";
       btnBoost.disabled = true;
+    } else if (!acessoAtivo) {
+      btnBoost.textContent = "Boost indisponível sem acesso ativo";
+      btnBoost.disabled = true;
     } else {
       btnBoost.textContent = "Comprar boost 7 dias • R$ 4,99";
       btnBoost.disabled = false;
+    }
+  }
+
+  if (btnSubscription) {
+    if (promoLancamentoAtiva) {
+      btnSubscription.textContent = "Promo grátis ativa";
+      btnSubscription.disabled = true;
+    } else if (assinaturaAtiva) {
+      btnSubscription.textContent = profile.assinatura_ate
+        ? `Assinatura ativa até ${formatDateTimeBR(profile.assinatura_ate)}`
+        : "Assinatura ativa";
+      btnSubscription.disabled = true;
+    } else {
+      btnSubscription.textContent = "Assinar 30 dias • R$ 9,99";
+      btnSubscription.disabled = false;
+    }
+  }
+
+  if (subscriptionStatusHint) {
+    if (promoLancamentoAtiva) {
+      subscriptionStatusHint.textContent = `Você já está usando a promoção de lançamento até ${formatDateTimeBR(profile.assinatura_ate)}.`;
+    } else if (assinaturaAtiva) {
+      subscriptionStatusHint.textContent = `Sua assinatura já está ativa até ${formatDateTimeBR(profile.assinatura_ate)}.`;
+    } else {
+      subscriptionStatusHint.textContent = "Sem assinatura ativa. Ao assinar, seu perfil volta a aparecer normalmente para clientes.";
     }
   }
 
@@ -2815,6 +2889,7 @@ function updateDashboardUI() {
   if (!state.isEditingProfile) {
     setProfileEditMode(false);
   }
+
   updatePasswordRecoveryUI();
 }
 
@@ -3690,13 +3765,13 @@ async function loadPublicProfile() {
     return;
   }
 
-  const { data, error } = await supabase
+    const { data, error } = await supabase
     .from("prestadores")
     .select("*")
     .eq("id", prestadorId)
     .maybeSingle();
 
-  if (error || !data || data.bloqueado) {
+  if (error || !data || data.bloqueado || !hasProviderActiveAccess(data)) {
     container.innerHTML = `
       <div class="card">
         <h3>Perfil não encontrado</h3>
@@ -3707,7 +3782,7 @@ async function loadPublicProfile() {
     return;
   }
 
-    await incrementProviderViews(data.id);
+  await incrementProviderViews(data.id);
 
   const services = getProviderServices(data);
   const boostAtivo = isBoostActive(data);

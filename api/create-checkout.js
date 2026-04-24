@@ -109,7 +109,7 @@ module.exports = async (req, res) => {
 
     const { data: prestador, error: prestadorError } = await supabase
     .from("prestadores")
-    .select("id, user_id, nome, email, whatsapp, bloqueado")
+    .select("id, user_id, nome, email, whatsapp, bloqueado, promo_lancamento, assinatura_ate")
     .eq("id", prestadorId)
     .maybeSingle();
 
@@ -125,6 +125,36 @@ module.exports = async (req, res) => {
       return res.status(403).json({ error: "Conta de prestador bloqueada" });
     }
 
+        const acessoAtivo =
+      !!prestador.assinatura_ate &&
+      new Date(prestador.assinatura_ate) > new Date();
+
+    const promoLancamentoAtiva =
+      !!prestador.promo_lancamento && acessoAtivo;
+
+    const assinaturaAtiva =
+      !prestador.promo_lancamento && acessoAtivo;
+
+    if (tipo === "assinatura") {
+      if (promoLancamentoAtiva) {
+        return res.status(409).json({
+          error: `Você já está no período promocional gratuito até ${new Date(prestador.assinatura_ate).toLocaleString("pt-BR")}.`
+        });
+      }
+
+      if (assinaturaAtiva) {
+        return res.status(409).json({
+          error: `Sua assinatura já está ativa até ${new Date(prestador.assinatura_ate).toLocaleString("pt-BR")}.`
+        });
+      }
+    }
+
+    if (tipo === "boost" && !acessoAtivo) {
+      return res.status(409).json({
+        error: "O boost só pode ser comprado quando o perfil estiver com acesso ativo."
+      });
+    }
+    
     let valorCentavos = 0;
     let descricao = "";
     let dias = 0;

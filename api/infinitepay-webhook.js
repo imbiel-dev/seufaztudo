@@ -303,6 +303,7 @@ module.exports = async (req, res) => {
             .from("prestadores")
             .update({
               assinatura_ate: assinaturaAte.toISOString(),
+              promo_lancamento: false,
               updated_at: new Date().toISOString()
             })
             .eq("id", prestador.id);

@@ -332,6 +332,12 @@ body.topbar-scrolled .topbar {
   align-items: stretch;
 }
 
+.subscription-status-hint {
+  display: block;
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
 #screen-dashboard > .card {
   margin-bottom: 14px;
 }
