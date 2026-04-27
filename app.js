@@ -3956,34 +3956,39 @@ async function avaliarPrestador(prestadorId, options = {}) {
   }
 
   try {
-    const insertPayload = {
-      prestador_id: prestadorId,
-      nota
-    };
-
-    if (!publicMode && state.myUrgentCallId) {
-      insertPayload.chamado_id = state.myUrgentCallId;
-    }
-
-    const { error: insertError } = await withRequestTimeout(
-      supabase
-        .from("avaliacoes")
-        .insert(insertPayload),
+    const response = await withRequestTimeout(
+      fetch("/api/submit-rating", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          prestadorId,
+          nota,
+          chamadoId: !publicMode && state.myUrgentCallId ? state.myUrgentCallId : null
+        })
+      }),
       15000,
       "O envio da avaliação demorou demais. Tente novamente."
     );
 
-    if (insertError) {
-      throw insertError;
+    const rawText = await response.text();
+
+    let result = null;
+    try {
+      result = rawText ? JSON.parse(rawText) : null;
+    } catch (_error) {
+      result = { raw: rawText };
     }
 
-    const roundedMedia = await withRequestTimeout(
-      recalculateProviderRating(prestadorId),
-      15000,
-      "A atualização da nota média demorou demais. Tente novamente."
-    );
+    if (!response.ok) {
+      throw new Error(result?.error || "Erro ao enviar avaliação.");
+    }
+
+    const roundedMedia = Number(result?.avaliacao_media || 0);
 
     applyProviderRatingLocally(prestadorId, roundedMedia);
+    await fetchProviders();
     updateDashboardUI();
 
     if (publicMode) {

@@ -222,17 +222,12 @@ const payload = {
   metadata: {
     prestador_id: prestadorId,
     tipo,
-    order_nsu: orderNsu
+    order_nsu: orderNsu,
+    customer_name: customerName || null,
+    customer_email: customerEmail || null,
+    customer_phone: customerPhone || null
   }
 };
-
-if (customerName && isValidCheckoutEmail(customerEmail) && customerPhone) {
-  payload.customer = {
-    name: customerName,
-    email: customerEmail,
-    phone_number: customerPhone
-  };
-}
 
     const response = await fetch("https://api.infinitepay.io/invoices/public/checkout/links", {
       method: "POST",
@@ -316,14 +311,18 @@ if (customerName && isValidCheckoutEmail(customerEmail) && customerPhone) {
     }
 
     const { error: paymentUpdateError } = await supabase
-      .from("pagamentos")
-      .update({
-        checkout_url: checkoutUrl,
-        invoice_slug: invoiceSlug,
-        descricao,
-        raw_payload: responseData
-      })
-      .eq("order_nsu", orderNsu);
+  .from("pagamentos")
+  .update({
+    checkout_url: checkoutUrl,
+    invoice_slug: invoiceSlug,
+    descricao,
+    raw_payload: {
+      request_payload: payload,
+      response_payload: responseData,
+      response_status: response.status
+    }
+  })
+  .eq("order_nsu", orderNsu);
 
     if (paymentUpdateError) {
       console.error("Erro ao atualizar pagamento com checkout:", paymentUpdateError);
