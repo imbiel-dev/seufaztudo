@@ -7,11 +7,11 @@
   <title>seufaztudo | Encontre prestadores perto de você</title>
   <meta
     name="description"
-    content="Encontre eletricistas, encanadores, diaristas, pedreiros, chaveiros e outros prestadores perto de você no seufaztudo. Busca por proximidade, contato via WhatsApp e chamado urgente."
+    content="Encontre eletricistas, encanadores, diaristas, pedreiros, chaveiros e outros prestadores perto de você no seufaztudo. Busca por proximidade e contato via WhatsApp."
   />
   <meta
     name="keywords"
-    content="prestador de serviço, serviços perto de mim, eletricista, encanador, diarista, pedreiro, chaveiro, marido de aluguel, chamado urgente, São Paulo"
+    content="prestador de serviço, serviços perto de mim, eletricista, encanador, diarista, pedreiro, chaveiro, marido de aluguel, São Paulo"
   />
   <meta name="robots" content="index,follow,max-image-preview:large" />
   <meta name="author" content="seufaztudo" />
@@ -25,13 +25,13 @@
   <meta property="og:locale" content="pt_BR" />
   <meta property="og:site_name" content="seufaztudo" />
   <meta property="og:title" content="seufaztudo | Encontre prestadores perto de você" />
-  <meta property="og:description" content="Busque prestadores por proximidade, fale direto no WhatsApp e envie chamado urgente." />
+  <meta property="og:description" content="Busque prestadores por proximidade e fale direto no WhatsApp." />
   <meta property="og:url" content="https://seufaztudo.com.br/" />
   <meta property="og:image" content="https://seufaztudo.com.br/img/logo.png" />
 
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="seufaztudo | Encontre prestadores perto de você" />
-  <meta name="twitter:description" content="Busque prestadores por proximidade, fale direto no WhatsApp e envie chamado urgente." />
+  <meta name="twitter:description" content="Busque prestadores por proximidade  fale direto no WhatsApp." />
   <meta name="twitter:image" content="https://seufaztudo.com.br/img/logo.png" />
 
   <meta name="geo.region" content="BR-SP" />
@@ -69,7 +69,6 @@
 
     <nav class="topnav">
       <button class="nav-btn" data-route="home">Início</button>
-      <button class="nav-btn" data-route="urgent">Chamado urgente</button>
       <button class="nav-btn" data-route="login">Login</button>
       <button class="nav-btn" data-route="register">Cadastrar prestador</button>
       <button class="nav-btn hidden" id="btnDashboard" data-route="dashboard">Dashboard</button>
@@ -276,17 +275,10 @@
             <textarea id="registerDescription" rows="4" placeholder="Fale rapidamente sobre o seu serviço"></textarea>
           </div>
 
-          <div class="grid-2">
-            <label class="check">
-              <input id="registerEmergency" type="checkbox" />
-              <span>Atendo emergência</span>
-            </label>
-
-            <div class="actions-end">
-              <button type="button" id="btnRegisterLocation" class="btn btn-secondary">
-                Usar minha localização atual
-              </button>
-            </div>
+          <div class="actions-end">
+            <button type="button" id="btnRegisterLocation" class="btn btn-secondary">
+              Usar minha localização atual
+            </button>
           </div>
 
           <div class="location-box">
@@ -449,17 +441,10 @@
             <textarea id="profileDescription" rows="4" disabled></textarea>
           </div>
 
-          <div class="grid-2">
-            <label class="check">
-              <input id="profileEmergency" type="checkbox" disabled />
-              <span>Atendo emergência</span>
-            </label>
-
-            <div class="actions-end">
-              <button type="button" id="btnProfileLocation" class="btn btn-secondary" disabled>
-                Atualizar localização
-              </button>
-            </div>
+          <div class="actions-end">
+            <button type="button" id="btnProfileLocation" class="btn btn-secondary" disabled>
+              Atualizar localização
+            </button>
           </div>
 
           <div class="location-box">
@@ -506,78 +491,8 @@
         </form>
       </div>
 
-      <div class="card">
-        <h3>Chamados urgentes recebidos</h3>
-        <p class="muted">
-          Aqui aparecem os chamados próximos da sua região quando você atende emergência.
-        </p>
-
-        <div class="actions">
-          <button id="btnRefreshUrgentRequests" class="btn btn-secondary" type="button">
-            Atualizar chamados
-          </button>
-        </div>
-
-        <div id="providerUrgentCallsList" class="providers-list"></div>
-      </div>
     </section>
 
-    <!-- CHAMADO URGENTE -->
-    <section class="screen" id="screen-urgent">
-      <div class="card">
-        <h3>Chamado urgente</h3>
-        <p class="muted">
-          Envie um chamado para prestadores próximos e aumente suas chances de resolver o problema rápido.
-        </p>
-
-         <form id="formUrgent">
-          <div class="grid-2">
-            <div class="field autocomplete-field">
-              <label for="urgentService">Serviço necessário</label>
-              <input id="urgentService" type="text" placeholder="Ex: encanador" autocomplete="off" required />
-              <div id="urgentServiceSuggestions" class="autocomplete-box hidden"></div>
-              <small id="urgentServiceHint" class="small-muted hidden"></small>
-            </div>
-
-            <div class="field">
-              <label for="urgentContact">Seu contato</label>
-              <input id="urgentContact" type="text" placeholder="WhatsApp ou telefone" required />
-            </div>
-          </div>
-
-          <div class="field">
-            <label for="urgentDescription">Descreva o problema</label>
-            <textarea id="urgentDescription" rows="4" placeholder="Ex: vazamento na cozinha" required></textarea>
-          </div>
-
-          <div class="actions urgent-actions">
-            <button type="button" id="btnUrgentLocation" class="btn btn-secondary">Usar minha localização</button>
-            <button type="submit" id="btnSubmitUrgent" class="btn">Enviar chamado</button>
-          </div>
-
-          <div class="location-box urgent-location-box">
-            <strong>Local do chamado:</strong>
-            <span id="urgentLocationText">não definido</span>
-            <small id="urgentLocationHelp" class="small-muted">
-              Sua localização ajuda a encontrar prestadores próximos mais rápido. Se não funcionar, tente novamente em um local com GPS mais preciso.
-            </small>
-          </div>
-        </form>
-      </div>
-
-      <div class="card">
-        <h3>Respostas do seu chamado</h3>
-        <p class="muted">
-          Depois de enviar, os prestadores próximos poderão responder aqui. Mantenha esta página aberta ou atualize para acompanhar novas respostas.
-        </p>
-
-        <div class="actions">
-          <button id="btnLoadMyUrgentResponses" class="btn btn-secondary" type="button">Atualizar respostas</button>
-        </div>
-
-        <div id="urgentResponsesList" class="providers-list"></div>
-      </div>
-    </section>
 
     <!-- TERMOS DE USO -->
 <section class="screen" id="screen-terms">
@@ -649,7 +564,7 @@
     <p>
       A plataforma poderá utilizar localização aproximada ou precisa, quando autorizada,
       para exibir prestadores próximos, ordenar resultados, calcular distância e
-      viabilizar funcionalidades como busca local e chamados urgentes.
+      viabilizar funcionalidades como busca local.
     </p>
     <p>
       A ordem de exibição pode considerar, entre outros fatores, proximidade, categoria,
@@ -661,17 +576,7 @@
       contratações, exclusividade territorial ou retorno financeiro ao prestador.
     </p>
 
-    <h3>8. Chamados urgentes</h3>
-    <p>
-      A funcionalidade de chamado urgente destina-se apenas a ampliar a chance de contato
-      rápido com prestadores potencialmente compatíveis com a demanda.
-    </p>
-    <p>
-      O seufaztudo não garante tempo de resposta, aceite de atendimento, disponibilidade
-      do prestador, conclusão do serviço ou solução do problema relatado.
-    </p>
-
-    <h3>9. Pagamentos da plataforma</h3>
+    <h3>8. Pagamentos da plataforma</h3>
     <p>
       O seufaztudo poderá oferecer serviços pagos, como destaque, impulsionamento,
       assinatura, prioridade de exibição ou outros benefícios digitais.
@@ -682,7 +587,7 @@
       ou sucesso comercial.
     </p>
 
-    <h3>10. Conteúdo e propriedade intelectual</h3>
+    <h3>9. Conteúdo e propriedade intelectual</h3>
     <p>
       O nome seufaztudo, identidade visual, layout, textos institucionais, estrutura do
       sistema, banco de dados, lógicas de negócio, código-fonte, scripts, APIs, fluxos,
@@ -695,14 +600,14 @@
       sem autorização prévia e expressa do titular dos direitos.
     </p>
 
-    <h3>11. Conteúdo de terceiros</h3>
+    <h3>10. Conteúdo de terceiros</h3>
     <p>
       Perfis, descrições, avaliações, mensagens, números de contato, preços e demais
       informações inseridas por usuários ou prestadores são de responsabilidade exclusiva
       de quem as publica.
     </p>
 
-    <h3>12. Limitação de responsabilidade</h3>
+    <h3>11. Limitação de responsabilidade</h3>
     <p>
       Na máxima extensão permitida pela legislação aplicável, o seufaztudo não responde por:
     </p>
@@ -716,7 +621,7 @@
       Nada nestes Termos exclui responsabilidade que a lei impeça de excluir.
     </p>
 
-    <h3>13. Moderação, suspensão e exclusão</h3>
+    <h3>12. Moderação, suspensão e exclusão</h3>
     <p>
       O seufaztudo poderá, a seu critério e sem aviso prévio quando necessário para
       segurança, investigar, restringir, suspender ou encerrar contas, anúncios,
@@ -724,14 +629,14 @@
       terceiros e a plataforma em risco.
     </p>
 
-    <h3>14. Canal de contato</h3>
+    <h3>13. Canal de contato</h3>
     <p>
       Para dúvidas jurídicas, notificações, denúncias, direitos de titular de dados
       e solicitações relacionadas à plataforma, utilize:
       <strong>atendimento@seufaztudo.com.br</strong>
     </p>
 
-    <h3>15. Lei aplicável e foro</h3>
+    <h3>14. Lei aplicável e foro</h3>
     <p>
       Estes Termos são regidos pela legislação brasileira. O foro será o legalmente
       competente, observadas as normas aplicáveis de proteção do consumidor e as regras
@@ -777,7 +682,7 @@
     <ul>
       <li>criar, manter e autenticar contas;</li>
       <li>exibir perfis profissionais e conectar usuários a prestadores;</li>
-      <li>permitir busca por proximidade e envio de chamados urgentes;</li>
+      <li>permitir busca por proximidade;</li>
       <li>processar compras de funcionalidades pagas da plataforma;</li>
       <li>prevenir fraude, abuso, spam e incidentes de segurança;</li>
       <li>cumprir obrigações legais, regulatórias e requisições legítimas;</li>
@@ -799,7 +704,7 @@
     <p>
       Quando o usuário escolhe utilizar recursos de localização, os dados poderão ser
       tratados para busca de prestadores próximos, cálculo de distância, ranqueamento,
-      chamados urgentes e demais funcionalidades compatíveis com a finalidade informada.
+      e demais funcionalidades compatíveis com a finalidade informada.
     </p>
     <p>
       Caso a localização não seja concedida, algumas funções podem não operar corretamente.

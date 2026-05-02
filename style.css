@@ -554,11 +554,6 @@ body.topbar-scrolled .topbar {
   color: #fcd34d;
 }
 
-.badge-emergency {
-  background: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
-}
-
 .provider-actions {
   display: flex;
   gap: 10px;
@@ -844,10 +839,6 @@ body.topbar-scrolled .topbar {
   color: #fff4c2;
 }
 
-.public-profile-header .badge-emergency {
-  background: rgba(239, 68, 68, 0.22);
-  color: #ffe2e2;
-}
 
 .public-profile-header h2 {
   margin: 10px 0 8px;
@@ -902,45 +893,6 @@ body.topbar-scrolled .topbar {
   line-height: 1.5;
 }
 
-.urgent-actions {
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.urgent-actions .btn {
-  flex: 1 1 220px;
-}
-
-.urgent-location-box {
-  margin-top: 18px;
-}
-
-#urgentLocationHelp {
-  display: block;
-  margin-top: 8px;
-  line-height: 1.5;
-}
-
-#screen-urgent .card {
-  margin-bottom: 24px;
-}
-
-#screen-urgent textarea {
-  min-height: 120px;
-  resize: vertical;
-}
-
-#urgentResponsesList,
-#providerUrgentCallsList {
-  display: grid;
-  gap: 16px;
-}
-
-.urgent-empty-card {
-  padding-top: 26px;
-  padding-bottom: 26px;
-}
 
 #passwordRecoveryNotice {
   margin-bottom: 14px;
@@ -1073,30 +1025,6 @@ body.topbar-scrolled .topbar {
   cursor: not-allowed;
   transform: none !important;
 }
-
-.urgent-response-form textarea[disabled] {
-  opacity: 0.75;
-  cursor: not-allowed;
-}
-
-.urgent-response-form .btn[disabled] {
-  opacity: 0.75;
-  cursor: not-allowed;
-  transform: none !important;
-}
-
-#providerUrgentCallsList,
-#urgentResponsesList {
-  display: grid;
-  gap: 16px;
-}
-
-.urgent-empty-card {
-  padding-top: 24px;
-  padding-bottom: 24px;
-}
-
-
 
 
 

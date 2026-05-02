@@ -14,17 +14,13 @@ const state = {
 
   userLocation: null,
   providerRegisterLocation: null,
-  urgentLocation: null,
 
-  myUrgentCallId: null,
-  providerUrgentCalls: [],
-  myUrgentResponses: [],
   providers: [],
 
   realtimeChannels: []
 };
 
-const routes = ["home", "provider-profile", "login", "register", "dashboard", "urgent", "terms", "privacy", "payments", "legal"];
+const routes = ["home", "provider-profile", "login", "register", "dashboard", "terms", "privacy", "payments", "legal"];
 
 
 const PENDING_PROVIDER_PROFILE_KEY = "seufaztudo_pending_provider_profile";
@@ -896,7 +892,6 @@ function sanitizeProviderInsertPayload(payload, userId) {
     experiencia_anos: Number(payload?.experiencia_anos || 0),
     preco_medio: Number(payload?.preco_medio || 0),
     whatsapp: normalizeWhatsappBR(payload?.whatsapp),
-    atende_emergencia: !!payload?.atende_emergencia,
     raio_km: Number(payload?.raio_km || 0),
     latitude: Number(payload?.latitude),
     longitude: Number(payload?.longitude),
@@ -1436,13 +1431,6 @@ if (providerCard && isBoostActive(provider)) {
       badges.appendChild(badge);
     }
 
-    if (provider.atende_emergencia) {
-      const badge = document.createElement("span");
-      badge.className = "badge badge-emergency";
-      badge.textContent = "Emergência";
-      badges.appendChild(badge);
-    }
-
     const meta = fragment.querySelector(".provider-meta");
     meta.appendChild(createMetaPill(`${Number(provider.experiencia_anos || 0)} anos de experiência`));
     meta.appendChild(createMetaPill(formatCurrency(provider.preco_medio)));
@@ -1867,7 +1855,6 @@ function bindRegister() {
       preco_medio: toPositiveNumber($("registerPrice").value),
       raio_km: toPositiveNumber($("registerRadius").value),
       descricao: safeTrim($("registerDescription").value, 1000),
-      atende_emergencia: $("registerEmergency").checked,
       latitude: Number(state.providerRegisterLocation.latitude),
       longitude: Number(state.providerRegisterLocation.longitude)
     };
@@ -1937,7 +1924,6 @@ function bindRegister() {
         experiencia_anos: payload.experiencia_anos,
         preco_medio: payload.preco_medio,
         whatsapp: payload.whatsapp,
-        atende_emergencia: payload.atende_emergencia,
         raio_km: payload.raio_km,
         latitude: payload.latitude,
         longitude: payload.longitude,
@@ -2031,10 +2017,6 @@ function setProfileEditMode(isEditing) {
     }
   });
 
-  if ($("profileEmergency")) {
-    $("profileEmergency").disabled = !isEditing;
-  }
-
   if ($("btnProfileLocation")) {
     $("btnProfileLocation").disabled = !isEditing;
   }
@@ -2073,21 +2055,7 @@ function bindDashboard() {
     addProfileAdditionalService();
   });
 
-  $("btnRefreshUrgentRequests")?.addEventListener("click", async () => {
-  const button = $("btnRefreshUrgentRequests");
-
-  try {
-    setButtonLoading(button, true, "Atualizando chamados...");
-    await loadProviderUrgentCalls();
-    showAlert("Chamados atualizados com sucesso.", "success");
-  } catch (error) {
-    console.error(error);
-    showAlert(error.message || "Erro ao atualizar chamados.", "error");
-  } finally {
-    setButtonLoading(button, false);
-  }
-});
-
+ 
   $("profileAdditionalService")?.addEventListener("keydown", event => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -2115,7 +2083,6 @@ function bindDashboard() {
       preco_medio: $("profilePrice")?.value || "",
       raio_km: $("profileRadius")?.value || "",
       descricao: $("profileDescription")?.value || "",
-      atende_emergencia: $("profileEmergency")?.checked || false,
       latitude: state.currentProviderProfile?.latitude ?? null,
       longitude: state.currentProviderProfile?.longitude ?? null
     };
@@ -2146,7 +2113,6 @@ function bindDashboard() {
     $("profilePrice").value = backup.preco_medio || 0;
     $("profileRadius").value = String(backup.raio_km || 10);
     $("profileDescription").value = backup.descricao || "";
-    $("profileEmergency").checked = !!backup.atende_emergencia;
 
     state.currentProviderProfile.latitude = backup.latitude;
     state.currentProviderProfile.longitude = backup.longitude;
@@ -2244,7 +2210,6 @@ function bindDashboard() {
       preco_medio: toPositiveNumber($("profilePrice")?.value) ?? 0,
       raio_km: toPositiveNumber($("profileRadius")?.value) ?? 10,
       descricao: safeTrim($("profileDescription")?.value, 1000),
-      atende_emergencia: !!$("profileEmergency")?.checked,
       latitude,
       longitude,
       email: safeTrim(state.currentUser.email, 160)
@@ -2498,167 +2463,7 @@ async function startCheckout(tipo) {
   }
 }
 
-function bindUrgent() {
-  $("btnUrgentLocation")?.addEventListener("click", async () => {
-    try {
-      const coords = await getCurrentPosition();
-      state.urgentLocation = coords;
-      $("urgentLocationText").textContent = formatCoords(coords.latitude, coords.longitude);
-      $("urgentLocationHelp").textContent =
-        "Localização capturada com sucesso. Agora o sistema pode buscar prestadores próximos com mais precisão.";
-      showAlert("Localização do chamado capturada.", "success");
-    } catch (error) {
-      console.error(error);
-      state.urgentLocation = null;
-      $("urgentLocationText").textContent = "não definido";
-      $("urgentLocationHelp").textContent =
-        "Não foi possível capturar sua localização agora. Tente novamente em um local com melhor sinal ou recarregue a página antes de enviar.";
-      showAlert("Não foi possível obter sua localização.", "error");
-    }
-  });
 
-  $("formUrgent")?.addEventListener("submit", async event => {
-    event.preventDefault();
-    await createUrgentCall();
-  });
-
-  $("btnLoadMyUrgentResponses")?.addEventListener("click", async () => {
-    await loadMyUrgentResponses();
-  });
-}
-
-async function createUrgentCall() {
-  if (!supabase) {
-    showAlert("Supabase não configurado corretamente.", "error");
-    return;
-  }
-
-  const submitBtn = $("btnSubmitUrgent");
-
-  if (!state.urgentLocation) {
-    showAlert("Defina a localização do chamado antes de enviar.", "error");
-    return;
-  }
-
-  const servico = safeTrim($("urgentService").value, 120);
-  const clienteContato = safeTrim($("urgentContact").value, 80);
-  const descricao = safeTrim($("urgentDescription").value, 1000);
-
-  const lastCall = localStorage.getItem("lastCallTime");
-
-  if (lastCall && Date.now() - Number(lastCall) < 60000) {
-    showAlert("Espere 1 minuto antes de enviar outro chamado.", "error");
-    return;
-  }
-
-  if (!servico || !clienteContato || !descricao) {
-    showAlert("Preencha todos os campos do chamado.", "error");
-    return;
-  }
-
-  if (servico.length < 2) {
-    showAlert("Serviço inválido.", "error");
-    return;
-  }
-
-  if (clienteContato.length < 8) {
-    showAlert("Contato inválido.", "error");
-    return;
-  }
-
-  try {
-    setButtonLoading(submitBtn, true, "Enviando chamado...");
-
-    const { data: chamadoData, error: chamadoError } = await supabase
-      .from("chamados")
-      .insert({
-        servico,
-        cliente_contato: clienteContato,
-        descricao,
-        latitude: state.urgentLocation.latitude,
-        longitude: state.urgentLocation.longitude,
-        status: "aberto",
-        expira_em: new Date(Date.now() + 30 * 60 * 1000).toISOString()
-      })
-      .select()
-      .single();
-
-    if (chamadoError) throw chamadoError;
-
-    state.myUrgentCallId = chamadoData.id;
-    localStorage.setItem("lastCallTime", Date.now());
-
-    let nearbyProviders = null;
-
-    if (typeof supabase.rpc === "function") {
-      const rpcResponse = await supabase.rpc("buscar_prestadores", {
-        user_lat: state.urgentLocation.latitude,
-        user_lng: state.urgentLocation.longitude,
-        raio_metros: 10000,
-        servico_busca: servico || null
-      });
-
-      if (!rpcResponse.error && Array.isArray(rpcResponse.data)) {
-        nearbyProviders = rpcResponse.data.filter(provider => provider.atende_emergencia);
-      }
-    }
-
-    if (!nearbyProviders) {
-      const { data: providersData, error: providersError } = await supabase
-        .from("prestadores")
-        .select("*")
-        .eq("atende_emergencia", true);
-
-      if (providersError) throw providersError;
-
-      nearbyProviders = (providersData || []).filter(provider => {
-        const serviceMatch = providerMatchesService(provider, servico);
-
-        const distanceKm = calculateDistanceKm(
-          state.urgentLocation.latitude,
-          state.urgentLocation.longitude,
-          Number(provider.latitude),
-          Number(provider.longitude)
-        );
-
-        return serviceMatch && typeof distanceKm === "number" && distanceKm <= 10;
-      });
-    }
-
-    if (nearbyProviders.length) {
-      const destinatarios = nearbyProviders.map(provider => ({
-        chamado_id: chamadoData.id,
-        prestador_id: provider.id,
-        status: "pendente"
-      }));
-
-      const { error: destinatariosError } = await supabase
-        .from("chamados_destinatarios")
-        .insert(destinatarios);
-
-      if (destinatariosError) throw destinatariosError;
-    }
-
-    $("formUrgent").reset();
-    $("urgentResponsesList").innerHTML = "";
-    $("urgentLocationText").textContent = "não definido";
-    $("urgentLocationHelp").textContent =
-      "Sua localização ajuda a encontrar prestadores próximos mais rápido. Se não funcionar, tente novamente em um local com GPS mais preciso.";
-    state.urgentLocation = null;
-
-        showAlert("Chamado urgente enviado com sucesso.", "success");
-    await loadMyUrgentResponses();
-
-    if (state.currentProviderProfile) {
-      await loadProviderUrgentCalls();
-    }
-  } catch (error) {
-    console.error(error);
-    showAlert(error.message || "Erro ao enviar chamado urgente.", "error");
-  } finally {
-    setButtonLoading(submitBtn, false);
-  }
-}
 
 async function loadMyProvider(silent = false) {
   if (!supabase) return;
@@ -2715,9 +2520,7 @@ async function loadMyProvider(silent = false) {
   updateDashboardUI();
   setProfileEditMode(false);
 
-  if (state.currentProviderProfile) {
-    await loadProviderUrgentCalls();
-  }
+  
 }
 
 function updateDashboardUI() {
@@ -2731,7 +2534,6 @@ function updateDashboardUI() {
   const profilePrice = $("profilePrice");
   const profileRadius = $("profileRadius");
   const profileDescription = $("profileDescription");
-  const profileEmergency = $("profileEmergency");
   const profileLocationText = $("profileLocationText");
   const statViews = $("statViews");
   const statWhatsapp = $("statWhatsapp");
@@ -2741,7 +2543,6 @@ function updateDashboardUI() {
   const btnBoost = $("btnBoost");
   const btnSubscription = $("btnSubscription");
   const subscriptionStatusHint = $("subscriptionStatusHint");
-  const providerUrgentCallsList = $("providerUrgentCallsList");
 
   if (!profile) {
     if (profileName) profileName.value = "";
@@ -2751,7 +2552,6 @@ function updateDashboardUI() {
     if (profilePrice) profilePrice.value = "";
     if (profileRadius) profileRadius.value = "10";
     if (profileDescription) profileDescription.value = "";
-    if (profileEmergency) profileEmergency.checked = false;
     if (profileLocationText) profileLocationText.textContent = "não definida";
 
     if (statViews) statViews.textContent = "0";
@@ -2781,7 +2581,6 @@ function updateDashboardUI() {
         : "";
     }
 
-    if (providerUrgentCallsList) providerUrgentCallsList.innerHTML = "";
 
     $("btnToggleEditProfile")?.classList.toggle("hidden", !profile);
 
@@ -2802,7 +2601,6 @@ function updateDashboardUI() {
   if (profilePrice) profilePrice.value = profile.preco_medio ?? "";
   if (profileRadius) profileRadius.value = profile.raio_km ?? "";
   if (profileDescription) profileDescription.value = profile.descricao || "";
-  if (profileEmergency) profileEmergency.checked = !!profile.atende_emergencia;
 
   if (profileLocationText) {
     if (profile.latitude && profile.longitude) {
@@ -2905,419 +2703,6 @@ function updateMissingProfileNotice() {
   $("providerMissingProfileNotice")?.classList.toggle("hidden", !shouldShow);
 }
 
-async function loadProviderUrgentCalls() {
-  const container = $("providerUrgentCallsList");
-  if (!container) return;
-
-  if (!state.currentProviderProfile) {
-    container.innerHTML = `
-      <div class="card urgent-empty-card">
-        <h3>Faça login</h3>
-        <p class="muted">Entre como prestador para visualizar chamados urgentes.</p>
-      </div>
-    `;
-    return;
-  }
-
-  const { data, error } = await supabase
-    .from("chamados_destinatarios")
-    .select(`
-      id,
-      status,
-      chamado:chamados (
-        id,
-        servico,
-        cliente_contato,
-        descricao,
-        status,
-        prestador_escolhido_id,
-        created_at,
-        expira_em
-      )
-    `)
-    .eq("prestador_id", state.currentProviderProfile.id)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error(error);
-    showAlert("Erro ao carregar chamados urgentes.", "error");
-    container.innerHTML = "";
-    return;
-  }
-
-  const mergedCalls = (data || [])
-    .filter(item => item.chamado)
-    .map(item => ({
-      ...item.chamado,
-      destinatario_status: item.status,
-      destinatario_id: item.id
-    }));
-
-  for (const call of mergedCalls) {
-    if (call.status === "aberto" && call.expira_em && new Date(call.expira_em) <= new Date()) {
-      await supabase
-        .from("chamados")
-        .update({ status: "expirado", encerrado_em: new Date().toISOString() })
-        .eq("id", call.id)
-        .eq("status", "aberto");
-
-      call.status = "expirado";
-    }
-  }
-
-  state.providerUrgentCalls = mergedCalls.filter(call => call.status === "aberto");
-  renderProviderUrgentCalls(state.providerUrgentCalls);
-}
-
-function renderProviderUrgentCalls(calls) {
-  const container = $("providerUrgentCallsList");
-  if (!container) return;
-
-  container.innerHTML = "";
-
-  if (!calls.length) {
-    container.innerHTML = `
-      <div class="card urgent-empty-card">
-        <h3>Nenhum chamado por enquanto</h3>
-        <p class="muted">Quando surgirem chamados próximos da sua região, eles aparecerão aqui automaticamente.</p>
-      </div>
-    `;
-    return;
-  }
-
-  calls.forEach(call => {
-    const article = document.createElement("article");
-    article.className = "provider-card";
-
-    const chosen = call.prestador_escolhido_id === state.currentProviderProfile?.id;
-    const alreadyResponded =
-      call.destinatario_status === "respondido" || call.destinatario_status === "enviada";
-
-    article.innerHTML = `
-      <div class="provider-top">
-        <div>
-          <h4 class="provider-name">${escapeHtml(call.servico || "Chamado urgente")}</h4>
-          <p class="provider-service">Contato: ${escapeHtml(call.cliente_contato || "não informado")}</p>
-        </div>
-        <div class="provider-badges">
-          <span class="badge badge-emergency">Aberto</span>
-          ${chosen ? `<span class="badge badge-boost">Você foi escolhido</span>` : ``}
-          ${alreadyResponded ? `<span class="badge">Respondido</span>` : ``}
-        </div>
-      </div>
-
-      <p class="provider-description">${escapeHtml(call.descricao || "")}</p>
-
-      <div class="provider-meta">
-        <span class="meta-pill">Criado em ${formatDateTimeBR(call.created_at)}</span>
-        <span class="meta-pill">Status: ${escapeHtml(call.status || "aberto")}</span>
-      </div>
-
-      <div class="inline-form urgent-response-form">
-        <textarea
-          id="responseMessage-${call.id}"
-          rows="3"
-          placeholder="Ex: Posso atender em 20 minutos."
-          ${alreadyResponded ? "disabled" : ""}
-        ></textarea>
-
-        <div class="actions">
-          <button
-            class="btn"
-            type="button"
-            data-respond-call="${call.id}"
-            ${alreadyResponded ? "disabled" : ""}
-          >
-            ${alreadyResponded ? "Resposta enviada" : "Responder chamado"}
-          </button>
-        </div>
-      </div>
-    `;
-
-    container.appendChild(article);
-  });
-
-  container.querySelectorAll("[data-respond-call]").forEach(button => {
-    button.addEventListener("click", async () => {
-      const chamadoId = button.getAttribute("data-respond-call");
-      const textarea = $(`responseMessage-${chamadoId}`);
-      const mensagem = textarea?.value.trim() || "";
-
-      if (!mensagem) {
-        showAlert("Digite uma mensagem para responder o chamado.", "error");
-        return;
-      }
-
-      await respondToUrgentCall(chamadoId, mensagem, button, textarea);
-    });
-  });
-}
-
-async function respondToUrgentCall(chamadoId, mensagem, button = null, textarea = null) {
-  const call = state.providerUrgentCalls.find(c => c.id === chamadoId);
-
-  if (call && call.status === "fechado") {
-    showAlert("Este chamado já foi encerrado.", "error");
-    return;
-  }
-
-  if (!state.currentProviderProfile) {
-    showAlert("Faça login como prestador.", "error");
-    return;
-  }
-
-  try {
-    setButtonLoading(button, true, "Enviando resposta...");
-
-    const { error } = await supabase
-      .from("chamado_respostas")
-      .upsert(
-        {
-          chamado_id: chamadoId,
-          prestador_id: state.currentProviderProfile.id,
-          mensagem,
-          status: "enviada"
-        },
-        {
-          onConflict: "chamado_id,prestador_id"
-        }
-      );
-
-    if (error) {
-      console.error("Erro ao inserir avaliação:", error);
-      throw error;
-    }
-
-    const { error: destinatarioError } = await supabase
-      .from("chamados_destinatarios")
-      .update({ status: "respondido" })
-      .eq("chamado_id", chamadoId)
-      .eq("prestador_id", state.currentProviderProfile.id);
-
-    if (destinatarioError) throw destinatarioError;
-
-    if (textarea) {
-      textarea.value = "";
-      textarea.disabled = true;
-    }
-
-    if (button) {
-      button.disabled = true;
-      button.textContent = "Resposta enviada";
-    }
-
-    showAlert("Resposta enviada com sucesso.", "success");
-    await loadProviderUrgentCalls();
-  } catch (error) {
-    console.error(error);
-    showAlert(error.message || "Erro ao responder chamado.", "error");
-  } finally {
-    if (button && button.textContent !== "Resposta enviada") {
-      setButtonLoading(button, false);
-    }
-  }
-}
-
-async function loadMyUrgentResponses() {
-  const container = $("urgentResponsesList");
-
-  if (!state.myUrgentCallId) {
-    container.innerHTML = `
-      <div class="card urgent-empty-card">
-        <h3>Nenhum chamado enviado ainda</h3>
-        <p class="muted">Envie um chamado urgente para ver respostas aqui.</p>
-      </div>
-    `;
-    return;
-  }
-
-  const { data, error } = await supabase
-    .from("chamado_respostas")
-    .select(`
-      id,
-      mensagem,
-      status,
-      created_at,
-      chamado:chamados(
-        id,
-        status,
-        prestador_escolhido_id,
-        expira_em
-      ),
-      prestador:prestadores (
-        id,
-        nome,
-        servico,
-        whatsapp,
-        experiencia_anos,
-        preco_medio,
-        avaliacao_media,
-        atende_emergencia
-      )
-    `)
-    .eq("chamado_id", state.myUrgentCallId)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error(error);
-    showAlert("Erro ao carregar respostas do chamado.", "error");
-    renderUrgentResponses([]);
-    return;
-  }
-
-  state.myUrgentResponses = data || [];
-  renderUrgentResponses(state.myUrgentResponses);
-}
-
-function renderUrgentResponses(responses) {
-  const container = $("urgentResponsesList");
-  if (!container) return;
-
-  container.innerHTML = "";
-
-  const expirado =
-    responses.length > 0 &&
-    responses[0].chamado?.status === "aberto" &&
-    responses[0].chamado?.expira_em &&
-    new Date(responses[0].chamado.expira_em) <= new Date();
-
-  const fechado =
-    state.myUrgentCallId &&
-    responses.some(response => response.chamado?.status === "fechado");
-
-  if (expirado) {
-    container.innerHTML = `
-      <div class="card urgent-empty-card">
-        <h3>Chamado expirado</h3>
-        <p class="muted">Nenhum prestador foi escolhido a tempo. Você pode criar um novo chamado.</p>
-      </div>
-    `;
-    return;
-  }
-
-  if (!responses.length) {
-    container.innerHTML = `
-      <div class="card urgent-empty-card">
-        <h3>Ainda sem respostas</h3>
-        <p class="muted">Assim que os prestadores responderem, elas aparecerão aqui automaticamente.</p>
-      </div>
-    `;
-    return;
-  }
-
-  responses.forEach(response => {
-    const prestador = response.prestador;
-    const escolhido =
-      response.chamado?.prestador_escolhido_id &&
-      response.chamado?.prestador_escolhido_id === prestador?.id;
-
-    const article = document.createElement("article");
-    article.className = "provider-card";
-
-    article.innerHTML = `
-      <div class="provider-top">
-        <div>
-          <h4 class="provider-name">${escapeHtml(prestador?.nome || "Prestador")}</h4>
-          <p class="provider-service">${escapeHtml(getProviderServices(prestador).join(", ") || "Serviço")}</p>
-        </div>
-        <div class="provider-badges">
-          ${escolhido ? `<span class="badge badge-boost">Escolhido</span>` : ``}
-          ${prestador?.atende_emergencia ? `<span class="badge badge-emergency">Emergência</span>` : ``}
-        </div>
-      </div>
-
-      <p class="provider-description">${escapeHtml(response.mensagem || "")}</p>
-
-      <div class="provider-meta">
-        <span class="meta-pill">${Number(prestador?.experiencia_anos || 0)} anos</span>
-        <span class="meta-pill">${formatCurrency(prestador?.preco_medio)}</span>
-        <span class="meta-pill">⭐ ${Number(prestador?.avaliacao_media || 0).toFixed(1)}</span>
-        <span class="meta-pill">Respondido em ${formatDateTimeBR(response.created_at)}</span>
-      </div>
-
-      <div class="provider-actions">
-        <a class="btn btn-whatsapp" target="_blank" rel="noopener noreferrer"
-          href="${toWhatsappLink(
-            prestador?.whatsapp,
-            `Olá ${prestador?.nome || ""}, vi sua resposta no seufaztudo e quero falar sobre meu chamado urgente.`
-          )}">
-          WhatsApp
-        </a>
-        ${
-          fechado
-            ? `<button class="btn btn-secondary" type="button" disabled>Chamado encerrado</button>`
-            : `<button class="btn" type="button" data-choose-provider="${prestador?.id}">Escolher prestador</button>
-               <button class="btn btn-secondary" type="button" data-rate-provider="${prestador?.id}">Avaliar</button>`
-        }
-      </div>
-    `;
-
-    container.appendChild(article);
-  });
-
-  container.querySelectorAll("[data-choose-provider]").forEach(button => {
-    button.addEventListener("click", async () => {
-      const prestadorId = button.getAttribute("data-choose-provider");
-      await chooseUrgentProvider(prestadorId, button);
-    });
-  });
-
-  container.querySelectorAll("[data-rate-provider]").forEach(button => {
-    button.addEventListener("click", async () => {
-      const prestadorId = button.getAttribute("data-rate-provider");
-      await avaliarPrestador(prestadorId);
-    });
-  });
-}
-
-async function chooseUrgentProvider(prestadorId, button = null) {
-  if (!state.myUrgentCallId) {
-    showAlert("Nenhum chamado encontrado.", "error");
-    return;
-  }
-
-  try {
-    if (button) {
-      setButtonLoading(button, true, "Escolhendo...");
-    }
-
-    const { data: currentCall, error: currentError } = await supabase
-      .from("chamados")
-      .select("status")
-      .eq("id", state.myUrgentCallId)
-      .single();
-
-    if (currentError) throw currentError;
-
-    if (currentCall.status === "fechado") {
-      showAlert("Este chamado já foi finalizado.", "error");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("chamados")
-      .update({
-        status: "fechado",
-        prestador_escolhido_id: prestadorId
-      })
-      .eq("id", state.myUrgentCallId);
-
-    if (error) {
-      console.error("Erro ao inserir avaliação:", error);
-      throw error;
-    }
-
-    showAlert("Prestador escolhido com sucesso.", "success");
-    await loadMyUrgentResponses();
-  } catch (error) {
-    console.error(error);
-    showAlert(error.message || "Erro ao escolher prestador.", "error");
-  } finally {
-    if (button) {
-      setButtonLoading(button, false);
-    }
-  }
-}
 
 async function processPaymentReturn() {
   const url = new URL(window.location.href);
@@ -3420,10 +2805,6 @@ function clearUserSessionState() {
   state.isEditingProfile = false;
   state.isPasswordRecoveryMode = false;
   state.profileDraftBackup = null;
-
-  state.providerUrgentCalls = [];
-  state.myUrgentResponses = [];
-  state.myUrgentCallId = null;
   state.profileAdditionalServices = [];
 
   clearRealtimeChannels();
@@ -3437,78 +2818,7 @@ function initRealtime() {
 
   clearRealtimeChannels();
 
-  const channelUrgentRecipients = supabase
-    .channel("chamados-destinatarios-realtime")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "chamados_destinatarios"
-      },
-      async payload => {
-        if (!state.currentProviderProfile) return;
-
-        const matchesProvider =
-          payload.new?.prestador_id === state.currentProviderProfile.id ||
-          payload.old?.prestador_id === state.currentProviderProfile.id;
-
-        if (matchesProvider) {
-          showAlert("Atualização em chamados urgentes recebida.", "info");
-          await loadProviderUrgentCalls();
-        }
-      }
-    )
-    .subscribe();
-
-  const channelResponses = supabase
-    .channel("respostas-realtime")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "chamado_respostas"
-      },
-      async payload => {
-        if (!state.myUrgentCallId) return;
-
-        const matchesCall =
-          payload.new?.chamado_id === state.myUrgentCallId ||
-          payload.old?.chamado_id === state.myUrgentCallId;
-
-        if (matchesCall) {
-          showAlert("Atualização nas respostas do seu chamado.", "success");
-          await loadMyUrgentResponses();
-        }
-      }
-    )
-    .subscribe();
-
-  const channelStatus = supabase
-    .channel("chamados-status")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "chamados"
-      },
-      async payload => {
-        const changedCallId = payload.new?.id || payload.old?.id;
-
-        if (changedCallId && changedCallId === state.myUrgentCallId) {
-          await loadMyUrgentResponses();
-        }
-
-        if (state.currentProviderProfile) {
-          await loadProviderUrgentCalls();
-        }
-      }
-    )
-    .subscribe();
-
-    const channelProviders = supabase
+  const channelProviders = supabase
     .channel("prestadores-realtime")
     .on(
       "postgres_changes",
@@ -3554,12 +2864,7 @@ function initRealtime() {
     )
     .subscribe();
 
-  state.realtimeChannels.push(
-    channelUrgentRecipients,
-    channelResponses,
-    channelStatus,
-    channelProviders
-  );
+  state.realtimeChannels.push(channelProviders);
 }
 
 function redirectAfterAuth(options = {}) {
@@ -3823,7 +3128,6 @@ async function loadPublicProfile() {
           <div class="public-profile-top-tags">
             <span class="tag">Prestador verificado na plataforma</span>
             ${boostAtivo ? `<span class="badge badge-boost">Boost ativo</span>` : ``}
-            ${data.atende_emergencia ? `<span class="badge badge-emergency">Emergência</span>` : ``}
           </div>
           <h2>${escapeHtml(data.nome || "Prestador")}</h2>
           <p class="public-profile-services">${escapeHtml(services.join(", ") || "Serviço não informado")}</p>
@@ -3843,7 +3147,6 @@ async function loadPublicProfile() {
             <span class="meta-pill">${formatCurrency(data.preco_medio)}</span>
             <span class="meta-pill">⭐ ${Number(data.avaliacao_media || 0).toFixed(1)}</span>
             <span class="meta-pill">Atende até ${Number(data.raio_km || 0)} km</span>
-            ${data.atende_emergencia ? `<span class="meta-pill">Atende emergência</span>` : ""}
           </div>
         </div>
       </div>
@@ -3986,8 +3289,7 @@ async function avaliarPrestador(prestadorId, options = {}) {
         },
         body: JSON.stringify({
           prestadorId,
-          nota,
-          chamadoId: !publicMode && state.myUrgentCallId ? state.myUrgentCallId : null
+          nota
         })
       }),
       15000,
@@ -4023,7 +3325,6 @@ async function avaliarPrestador(prestadorId, options = {}) {
     }
 
     showAlert("Avaliação enviada com sucesso.", "success");
-    await loadMyUrgentResponses();
   } catch (error) {
     console.error("Erro ao enviar avaliação:", error);
     showAlert(mapRatingErrorMessage(error), "error");
@@ -4042,7 +3343,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindLogin();
   bindRegister();
   bindDashboard();
-  bindUrgent();
   bindPayments();
 
   bindPublicProfile();
@@ -4057,7 +3357,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupServiceAutocomplete("registerAdditionalService", "registerAdditionalServiceSuggestions", "registerAdditionalServiceHint");
   setupServiceAutocomplete("profileService", "profileServiceSuggestions", "profileServiceHint");
   setupServiceAutocomplete("profileAdditionalService", "profileAdditionalServiceSuggestions", "profileAdditionalServiceHint");
-  setupServiceAutocomplete("urgentService", "urgentServiceSuggestions", "urgentServiceHint");
   
   await restoreSession();
   await processPaymentReturn();

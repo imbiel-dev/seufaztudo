@@ -28,8 +28,7 @@ module.exports = async (req, res) => {
 
     const {
       prestadorId,
-      nota,
-      chamadoId = null
+      nota
     } = req.body || {};
 
     if (!prestadorId) {
@@ -61,9 +60,6 @@ module.exports = async (req, res) => {
       nota: notaNumero
     };
 
-    if (chamadoId) {
-      insertPayload.chamado_id = chamadoId;
-    }
 
     const { error: insertError } = await supabase
       .from("avaliacoes")
