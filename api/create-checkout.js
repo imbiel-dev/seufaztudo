@@ -39,6 +39,8 @@ module.exports = async (req, res) => {
   const INFINITEPAY_HANDLE = process.env.INFINITEPAY_HANDLE;
   const APP_BASE_URL = process.env.APP_BASE_URL;
 
+  const NORMALIZED_APP_BASE_URL = String(APP_BASE_URL || "").trim().replace(/\/+$/, "");
+
   if (
     !SUPABASE_URL ||
     !SUPABASE_PUBLIC_KEY ||
@@ -217,8 +219,8 @@ const payload = {
     }
   ],
   order_nsu: orderNsu,
-  redirect_url: `${APP_BASE_URL}/?pagamento=sucesso&order_nsu=${encodeURIComponent(orderNsu)}`,
-  webhook_url: `${APP_BASE_URL}/api/infinitepay-webhook`,
+  redirect_url: `${NORMALIZED_APP_BASE_URL}/?pagamento=sucesso&order_nsu=${encodeURIComponent(orderNsu)}`,
+  webhook_url: `${NORMALIZED_APP_BASE_URL}/api/infinitepay-webhook`,
   metadata: {
     prestador_id: prestadorId,
     tipo,

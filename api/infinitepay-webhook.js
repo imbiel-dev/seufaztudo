@@ -218,14 +218,9 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: "Pagamento não encontrado" });
     }
 
-    if (pagamento.status === "pago" && normalizedStatus === "pago") {
-      return res.status(200).json({
-        success: true,
-        orderNsu,
-        status: "pago",
-        duplicate: true
-      });
-    }
+    const isDuplicatePaidWebhook =
+  pagamento.status === "pago" && normalizedStatus === "pago";
+
         const pagamentoUpdate = {
       status: normalizedStatus,
       transacao_nsu: transactionNsu || pagamento.transacao_nsu || null,
@@ -266,25 +261,23 @@ module.exports = async (req, res) => {
         if (pagamento.tipo === "boost") {
           const now = new Date();
           const currentBoostAte = prestador.boost_ate ? new Date(prestador.boost_ate) : null;
+          const boostJaAtivo = currentBoostAte && currentBoostAte > now;
 
-          const base =
-            currentBoostAte && currentBoostAte > now
-              ? currentBoostAte
-              : now;
+          if (!boostJaAtivo) {
+            const boostAte = addDays(now, pagamento.dias || 7);
 
-          const boostAte = addDays(base, pagamento.dias || 7);
+            const { error } = await supabase
+              .from("prestadores")
+              .update({
+                boost_ativo: true,
+                boost_ate: boostAte.toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", prestador.id);
 
-          const { error } = await supabase
-            .from("prestadores")
-            .update({
-              boost_ativo: true,
-              boost_ate: boostAte.toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", prestador.id);
-
-          if (error) {
-            return res.status(500).json({ error: error.message });
+            if (error) {
+              return res.status(500).json({ error: error.message });
+            }
           }
         }
 
@@ -315,13 +308,14 @@ module.exports = async (req, res) => {
       }
     }
 
-    return res.status(200).json({
-      success: true,
-      orderNsu,
-      status: normalizedStatus,
-      pagamento_tipo: pagamento.tipo,
-      prestador_id: pagamento.prestador_id
-    });
+   return res.status(200).json({
+  success: true,
+  orderNsu,
+  status: normalizedStatus,
+  duplicate: !!isDuplicatePaidWebhook,
+  pagamento_tipo: pagamento.tipo,
+  prestador_id: pagamento.prestador_id
+});
   } catch (error) {
     return res.status(500).json({
       error: error.message || "Erro interno no webhook"

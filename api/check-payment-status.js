@@ -58,7 +58,15 @@ module.exports = async (req, res) => {
       }
     );
 
-    const { prestadorId } = req.body || {};
+    const {
+      prestadorId,
+      orderNsu: returnOrderNsu = null,
+      transactionNsu: returnTransactionNsu = null,
+      transactionId: returnTransactionId = null,
+      slug: returnSlug = null,
+      receiptUrl: returnReceiptUrl = null,
+      captureMethod: returnCaptureMethod = null
+    } = req.body || {};
 
     if (!prestadorId) {
       return res.status(400).json({ error: "prestadorId é obrigatório" });
@@ -78,7 +86,7 @@ module.exports = async (req, res) => {
       return res.status(403).json({ error: "Prestador inválido para este usuário" });
     }
 
-    const { data: pagamentos, error: pagamentosError } = await supabase
+    const { data: pagamentosData, error: pagamentosError } = await supabase
       .from("pagamentos")
       .select("*")
       .eq("prestador_id", prestadorId)
@@ -90,73 +98,137 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: pagamentosError.message });
     }
 
+    let pagamentos = pagamentosData || [];
+
+const normalizedReturnTransaction =
+  returnTransactionNsu || returnTransactionId || null;
+
+if (returnOrderNsu) {
+  const pagamentoRetorno = pagamentos.find(
+    pagamento => pagamento.order_nsu === returnOrderNsu
+  );
+
+  if (pagamentoRetorno) {
+    const updatedReturnPayload = {
+      transaction_nsu: normalizedReturnTransaction || pagamentoRetorno.transaction_nsu || null,
+      transacao_nsu: normalizedReturnTransaction || pagamentoRetorno.transacao_nsu || null,
+      invoice_slug: returnSlug || pagamentoRetorno.invoice_slug || null,
+      receipt_url: returnReceiptUrl || pagamentoRetorno.receipt_url || null,
+      capture_method: returnCaptureMethod || pagamentoRetorno.capture_method || null,
+      updated_at: new Date().toISOString(),
+      raw_payload: {
+        ...(pagamentoRetorno.raw_payload || {}),
+        payment_return: {
+          order_nsu: returnOrderNsu,
+          transaction_nsu: normalizedReturnTransaction,
+          slug: returnSlug,
+          receipt_url: returnReceiptUrl,
+          capture_method: returnCaptureMethod,
+          received_at: new Date().toISOString()
+        }
+      }
+    };
+
+    const { error: returnUpdateError } = await supabase
+      .from("pagamentos")
+      .update(updatedReturnPayload)
+      .eq("id", pagamentoRetorno.id);
+
+    if (returnUpdateError) {
+      return res.status(500).json({ error: returnUpdateError.message });
+    }
+
+    pagamentos = pagamentos.map(pagamento =>
+      pagamento.id === pagamentoRetorno.id
+        ? { ...pagamento, ...updatedReturnPayload }
+        : pagamento
+    );
+  }
+}
+
     const pendentes = (pagamentos || []).filter(pagamento => {
-      return (
-        pagamento.status !== "pago" &&
-        pagamento.order_nsu &&
-        (
-          pagamento.transaction_nsu ||
-          pagamento.transacao_nsu ||
-          pagamento.invoice_slug
-        )
-      );
-    });
+  return (
+    pagamento.status !== "pago" &&
+    pagamento.order_nsu &&
+    (
+      pagamento.transaction_nsu ||
+      pagamento.transacao_nsu ||
+      pagamento.invoice_slug ||
+      pagamento.receipt_url
+    )
+  );
+});
 
     const resultados = [];
 
     for (const pagamento of pendentes) {
-      const payload = {
-        handle: INFINITEPAY_HANDLE,
-        order_nsu: pagamento.order_nsu,
-        transaction_nsu: pagamento.transaction_nsu || pagamento.transacao_nsu || undefined,
-        slug: pagamento.invoice_slug || undefined
-      };
-
-      const response = await fetch("https://api.infinitepay.io/invoices/public/checkout/payment_check", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const rawText = await response.text();
-
       let paymentCheckData = null;
-      try {
-        paymentCheckData = rawText ? JSON.parse(rawText) : null;
-      } catch (_error) {
-        paymentCheckData = { raw: rawText };
-      }
+let paid = pagamento.status === "pago";
 
-      resultados.push({
-        pagamento_id: pagamento.id,
-        order_nsu: pagamento.order_nsu,
-        response_ok: response.ok,
-        payment_check: paymentCheckData
-      });
+if (!paid) {
+  const payload = {
+    handle: INFINITEPAY_HANDLE,
+    order_nsu: pagamento.order_nsu,
+    transaction_nsu: pagamento.transaction_nsu || pagamento.transacao_nsu || undefined,
+    slug: pagamento.invoice_slug || undefined
+  };
 
-      if (!response.ok) {
-        continue;
-      }
+  const response = await fetch("https://api.infinitepay.io/invoices/public/checkout/payment_check", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
 
-      const paid = !!paymentCheckData?.paid;
+  const rawText = await response.text();
 
-      if (!paid) {
-        continue;
-      }
+  try {
+    paymentCheckData = rawText ? JSON.parse(rawText) : null;
+  } catch (_error) {
+    paymentCheckData = { raw: rawText };
+  }
+
+  resultados.push({
+    pagamento_id: pagamento.id,
+    order_nsu: pagamento.order_nsu,
+    response_ok: response.ok,
+    payment_check: paymentCheckData
+  });
+
+  if (!response.ok) {
+    continue;
+  }
+
+  paid = !!paymentCheckData?.paid;
+} else {
+  resultados.push({
+    pagamento_id: pagamento.id,
+    order_nsu: pagamento.order_nsu,
+    response_ok: true,
+    already_paid: true
+  });
+}
+
+if (!paid) {
+  continue;
+}
 
       const pagamentoUpdate = {
-        status: "pago",
-        capture_method: paymentCheckData?.capture_method || pagamento.capture_method || null,
-        paid_at: pagamento.paid_at || new Date().toISOString(),
-        pago_em: pagamento.pago_em || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        raw_payload: {
-          ...(pagamento.raw_payload || {}),
-          payment_check: paymentCheckData
-        }
-      };
+  status: "pago",
+  transaction_nsu: pagamento.transaction_nsu || pagamento.transacao_nsu || null,
+  transacao_nsu: pagamento.transacao_nsu || pagamento.transaction_nsu || null,
+  invoice_slug: pagamento.invoice_slug || null,
+  receipt_url: pagamento.receipt_url || null,
+  capture_method: paymentCheckData?.capture_method || pagamento.capture_method || null,
+  paid_at: pagamento.paid_at || new Date().toISOString(),
+  pago_em: pagamento.pago_em || new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  raw_payload: {
+    ...(pagamento.raw_payload || {}),
+    payment_check: paymentCheckData
+  }
+};
 
       const { error: pagamentoUpdateError } = await supabase
         .from("pagamentos")
@@ -184,27 +256,28 @@ module.exports = async (req, res) => {
       const now = new Date();
 
       if (pagamento.tipo === "boost") {
-        const boostBase =
-          prestadorAtual.boost_ate && new Date(prestadorAtual.boost_ate) > now
-            ? new Date(prestadorAtual.boost_ate)
-            : now;
+  const boostJaAtivo =
+    prestadorAtual.boost_ate &&
+    new Date(prestadorAtual.boost_ate) > now;
 
-        const boostAte = new Date(boostBase);
-        boostAte.setDate(boostAte.getDate() + Number(pagamento.dias || 7));
+  if (!boostJaAtivo) {
+    const boostAte = new Date(now);
+    boostAte.setDate(boostAte.getDate() + Number(pagamento.dias || 7));
 
-        const { error: boostError } = await supabase
-          .from("prestadores")
-          .update({
-            boost_ativo: true,
-            boost_ate: boostAte.toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", prestadorId);
+    const { error: boostError } = await supabase
+      .from("prestadores")
+      .update({
+        boost_ativo: true,
+        boost_ate: boostAte.toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", prestadorId);
 
-        if (boostError) {
-          return res.status(500).json({ error: boostError.message });
-        }
-      }
+    if (boostError) {
+      return res.status(500).json({ error: boostError.message });
+    }
+  }
+}
 
       if (pagamento.tipo === "assinatura") {
         const assinaturaBase =

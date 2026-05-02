@@ -508,7 +508,8 @@ async function syncCurrentProviderPaymentStatus(options = {}) {
   const {
     button = null,
     loadingText = "Atualizando...",
-    showAlerts = true
+    showAlerts = true,
+    paymentReturn = null
   } = options;
 
   try {
@@ -549,7 +550,8 @@ async function syncCurrentProviderPaymentStatus(options = {}) {
           "Authorization": `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          prestadorId: state.currentProviderProfile.id
+          prestadorId: state.currentProviderProfile.id,
+          ...(paymentReturn || {})
         })
       }),
       20000,
@@ -1413,6 +1415,11 @@ function renderProviders(list) {
     if (provider.bloqueado) return;
 
     const fragment = template.content.cloneNode(true);
+    const providerCard = fragment.querySelector(".provider-card");
+
+if (providerCard && isBoostActive(provider)) {
+  providerCard.classList.add("provider-card-boost");
+}
     const servicesText = getProviderServices(provider).join(", ") || "Serviço não informado";
 
     fragment.querySelector(".provider-name").textContent = provider.nome || "Prestador";
@@ -3337,8 +3344,18 @@ async function processPaymentReturn() {
 
       navigate("dashboard");
 
+      const paymentReturn = {
+        orderNsu,
+        transactionNsu: url.searchParams.get("transaction_nsu") || null,
+        transactionId: url.searchParams.get("transaction_id") || null,
+        slug: url.searchParams.get("slug") || null,
+        receiptUrl: url.searchParams.get("receipt_url") || null,
+        captureMethod: url.searchParams.get("capture_method") || null
+      };
+
       await syncCurrentProviderPaymentStatus({
-        showAlerts: false
+        showAlerts: false,
+        paymentReturn
       });
 
       const profile = state.currentProviderProfile;
@@ -3378,6 +3395,11 @@ async function processPaymentReturn() {
   } finally {
     url.searchParams.delete("pagamento");
     url.searchParams.delete("order_nsu");
+    url.searchParams.delete("capture_method");
+    url.searchParams.delete("transaction_id");
+    url.searchParams.delete("transaction_nsu");
+    url.searchParams.delete("slug");
+    url.searchParams.delete("receipt_url");
     window.history.replaceState({}, document.title, url.pathname + url.search);
   }
 }
