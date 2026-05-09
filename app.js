@@ -1219,6 +1219,13 @@ function formatDateTimeBR(dateString) {
   });
 }
 
+function hasPendingDeletionRequest(profile) {
+  return (
+    profile?.deletion_request_status === "pending" ||
+    !!profile?.deletion_requested_at
+  );
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -2527,6 +2534,10 @@ function updateDashboardUI() {
   const profile = state.currentProviderProfile;
   const logged = !!state.currentUser;
 
+  const deletionRequestNotice = $("deletionRequestNotice");
+  const btnRequestAccountDeletion = $("btnRequestAccountDeletion");
+
+
   const profileName = $("profileName");
   const profileWhatsapp = $("profileWhatsapp");
   const profileService = $("profileService");
@@ -2582,6 +2593,16 @@ function updateDashboardUI() {
     }
 
 
+    if (deletionRequestNotice) {
+      deletionRequestNotice.classList.add("hidden");
+      deletionRequestNotice.textContent = "";
+    }
+
+    if (btnRequestAccountDeletion) {
+      btnRequestAccountDeletion.disabled = !logged;
+      btnRequestAccountDeletion.textContent = "Solicitar exclusão da conta";
+    }
+
     $("btnToggleEditProfile")?.classList.toggle("hidden", !profile);
 
     setProfileEditMode(false);
@@ -2618,6 +2639,8 @@ function updateDashboardUI() {
   const promoLancamentoAtiva = isLaunchPromoActive(profile);
   const assinaturaAtiva = isPaidSubscriptionActive(profile);
   const boostAtivo = isBoostActive(profile);
+
+  const deletionRequested = hasPendingDeletionRequest(profile);
 
   if (statPlan) {
     statPlan.textContent = assinaturaAtiva
@@ -2686,6 +2709,28 @@ function updateDashboardUI() {
       subscriptionStatusHint.textContent = "Sem assinatura ativa. Ao assinar, seu perfil volta a aparecer normalmente para clientes.";
     }
   }
+
+  if (deletionRequestNotice) {
+  if (deletionRequested) {
+    deletionRequestNotice.classList.remove("hidden");
+    deletionRequestNotice.className = "alert alert-info";
+    deletionRequestNotice.textContent =
+      "Exclusão solicitada com sucesso. Sua solicitação está em análise pela equipe do seufaztudo.";
+  } else {
+    deletionRequestNotice.classList.add("hidden");
+    deletionRequestNotice.textContent = "";
+  }
+}
+
+if (btnRequestAccountDeletion) {
+  if (deletionRequested) {
+    btnRequestAccountDeletion.disabled = true;
+    btnRequestAccountDeletion.textContent = "Exclusão já solicitada";
+  } else {
+    btnRequestAccountDeletion.disabled = false;
+    btnRequestAccountDeletion.textContent = "Solicitar exclusão da conta";
+  }
+}
 
   $("btnToggleEditProfile")?.classList.remove("hidden");
 
@@ -3331,6 +3376,105 @@ async function avaliarPrestador(prestadorId, options = {}) {
   }
 }
 
+function bindPrivacyActions() {
+  $("btnRequestAccountDeletion")?.addEventListener("click", async () => {
+    if (!supabase) {
+      showAlert("Supabase não configurado corretamente.", "error");
+      return;
+    }
+
+    if (!state.currentUser) {
+      showAlert("Faça login para solicitar exclusão dos seus dados.", "error");
+      navigate("login");
+      return;
+    }
+
+    if (!state.currentProviderProfile?.id) {
+      await loadMyProvider(true);
+    }
+
+    if (!state.currentProviderProfile?.id) {
+      showAlert("Seu perfil de prestador não foi encontrado.", "error");
+      return;
+    }
+
+    if (hasPendingDeletionRequest(state.currentProviderProfile)) {
+      showAlert("Sua solicitação de exclusão já está registrada.", "info");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Deseja solicitar a exclusão da sua conta e dos seus dados? A equipe analisará sua solicitação antes da remoção definitiva."
+    );
+
+    if (!confirmed) return;
+
+    const button = $("btnRequestAccountDeletion");
+
+    try {
+      setButtonLoading(button, true, "Registrando solicitação...");
+
+      const requestedAt = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from("prestadores")
+        .update({
+          deletion_requested_at: requestedAt,
+          deletion_request_status: "pending",
+          updated_at: requestedAt
+        })
+        .eq("id", state.currentProviderProfile.id)
+        .eq("user_id", state.currentUser.id)
+        .select("*")
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data) {
+        throw new Error("Não foi possível registrar a solicitação.");
+      }
+
+      state.currentProviderProfile = data;
+      updateDashboardUI();
+
+      const subject = "Solicitação de exclusão de conta";
+
+      const body = [
+        "Olá, equipe seufaztudo.",
+        "",
+        "Solicito a exclusão da minha conta e a remoção dos meus dados da plataforma.",
+        "",
+        "Dados para localização da conta:",
+        `Nome: ${state.currentProviderProfile.nome || ""}`,
+        `Email: ${state.currentUser.email || state.currentProviderProfile.email || ""}`,
+        `WhatsApp: ${state.currentProviderProfile.whatsapp || ""}`,
+        `ID do usuário: ${state.currentUser.id || ""}`,
+        `ID do prestador: ${state.currentProviderProfile.id || ""}`,
+        `Serviço: ${state.currentProviderProfile.servico || ""}`,
+        "",
+        "Entendo que a equipe poderá manter registros mínimos necessários para obrigações legais, auditoria, prevenção a fraude e exercício regular de direitos, conforme a Política de Privacidade.",
+        "",
+        "Obrigado."
+      ].join("\n");
+
+      const mailtoUrl =
+        `mailto:atendimento@seufaztudo.com.br?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+      showAlert("Exclusão solicitada com sucesso. Seu aplicativo de e-mail será aberto.", "success");
+
+      window.location.href = mailtoUrl;
+    } catch (error) {
+      console.error("Erro ao solicitar exclusão:", error);
+      showAlert(error.message || "Erro ao solicitar exclusão dos dados.", "error");
+    } finally {
+      setButtonLoading(button, false);
+      updateDashboardUI();
+    }
+  });
+}
+
 
 document.addEventListener("DOMContentLoaded", async () => {
   if (!supabase) {
@@ -3345,6 +3489,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindDashboard();
   bindPayments();
 
+  bindPrivacyActions();
+  
   bindPublicProfile();
 
   bindChangePassword();
