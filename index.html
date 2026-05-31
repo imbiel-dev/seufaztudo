@@ -63,79 +63,193 @@
       <img src="img/logo.png" alt="Logo seufaztudo" class="brand-logo" />
       <div>
         <h1>seufaztudo</h1>
-        <p>Encontre prestadores perto de você</p>
+        <p>Prestadores perto de você</p>
       </div>
     </div>
 
+    <button id="btnMobileMenu" class="mobile-menu-btn" type="button" aria-label="Abrir menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+
     <nav class="topnav">
       <button class="nav-btn" data-route="home">Início</button>
-      <button class="nav-btn" data-route="login">Login</button>
+      <button class="nav-btn" data-route="login">Entrar</button>
       <button class="nav-btn" data-route="register">Cadastrar prestador</button>
       <button class="nav-btn hidden" id="btnDashboard" data-route="dashboard">Dashboard</button>
       <button class="nav-btn hidden" id="btnLogout">Sair</button>
     </nav>
   </header>
 
+  <div id="mobileMenuOverlay" class="mobile-menu-overlay hidden"></div>
+
+  <nav id="mobileMenuPanel" class="mobile-menu-panel hidden">
+    <div class="mobile-menu-panel-header">
+      <strong>Menu</strong>
+      <button id="btnCloseMobileMenu" type="button" aria-label="Fechar menu">×</button>
+    </div>
+
+    <button class="mobile-menu-link" data-route="home">Início</button>
+    <button class="mobile-menu-link" data-scroll-target="howItWorksSection">Como funciona</button>
+    <button class="mobile-menu-link" data-route="register">Sou prestador</button>
+    <button class="mobile-menu-link" data-route="login">Entrar</button>
+    <button class="mobile-menu-link hidden" id="btnMobileDashboard" data-route="dashboard">Dashboard</button>
+    <button class="mobile-menu-link hidden" id="btnMobileLogout" type="button">Sair</button>
+  </nav>
+
   <main class="container">
     <section id="alertBox" class="alert hidden"></section>
 
     <!-- HOME -->
-    <section class="screen active" id="screen-home">
-      <div class="hero">
+    <!-- HOME -->
+  <section class="screen active" id="screen-home">
+    <section class="home-app-hero">
+      <div class="home-hero-copy">
+        <h2>Precisa de um serviço perto de você?</h2>
+        <p>
+          Encontre prestadores independentes da sua região e fale direto pelo WhatsApp.
+        </p>
+      </div>
+
+      <div class="home-hero-visual" aria-hidden="true">
+        <div class="worker-card">
+          <div class="worker-avatar">🔧</div>
+          <span>Prestadores próximos</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="mobile-search-card">
+      <div class="field autocomplete-field mobile-search-field">
+        <label for="searchService">Que serviço você procura?</label>
+        <input id="searchService" type="text" placeholder="Ex: eletricista, encanador..." autocomplete="off" />
+        <div id="searchServiceSuggestions" class="autocomplete-box hidden"></div>
+        <small id="searchServiceHint" class="small-muted hidden"></small>
+      </div>
+
+      <div class="mobile-location-row">
         <div>
-          <span class="tag">Marketplace local</span>
-          <h2>O profissional certo, perto de você</h2>
-          <p>
-            Encontre encanadores, eletricistas, pedreiros, chaveiros e outros
-            prestadores próximos com rapidez.
-          </p>
+          <span class="location-label">Sua localização</span>
+          <strong id="userLocationText">não definida</strong>
         </div>
+
+        <button id="btnUseLocation" class="btn-location-mini" type="button">
+          Usar atual
+        </button>
       </div>
 
-      <div class="card">
-        <h3>Buscar prestadores</h3>
+      <small id="searchLocationHelp" class="small-muted mobile-location-help">
+        Use sua localização para encontrar prestadores mais próximos.
+      </small>
 
-        <div class="grid-3">
-          <div class="field autocomplete-field">
-            <label for="searchService">Serviço</label>
-            <input id="searchService" type="text" placeholder="Ex: eletricista" autocomplete="off" />
-            <div id="searchServiceSuggestions" class="autocomplete-box hidden"></div>
-            <small id="searchServiceHint" class="small-muted hidden"></small>
-          </div>
+      <select id="searchRadius" class="mobile-radius-select" aria-label="Raio de busca">
+        <option value="5">Buscar até 5 km</option>
+        <option value="10" selected>Buscar até 10 km</option>
+        <option value="20">Buscar até 20 km</option>
+        <option value="30">Buscar até 30 km</option>
+      </select>
 
-          <div class="field">
-            <label for="searchRadius">Raio</label>
-            <select id="searchRadius">
-              <option value="5">Até 5 km</option>
-              <option value="10" selected>Até 10 km</option>
-              <option value="20">Até 20 km</option>
-              <option value="30">Até 30 km</option>
-            </select>
-          </div>
+      <button id="btnSearch" class="btn btn-search-main" type="button">
+        Buscar perto de mim
+      </button>
 
-          <div class="field">
-            <label>&nbsp;</label>
-            <button id="btnUseLocation" class="btn btn-secondary" type="button">
-              Usar minha localização
-            </button>
-          </div>
-        </div>
+      <button id="btnClearSearch" class="btn-clear-search" type="button">
+        Limpar busca
+      </button>
+    </section>
 
-        <div class="location-box">
-          <strong>Sua localização:</strong>
-          <span id="userLocationText">não definida</span>
-          <small id="searchLocationHelp" class="small-muted">
-            Use sua localização para encontrar os prestadores mais próximos. Se não permitir acesso, a busca ainda poderá mostrar resultados gerais do serviço.
-          </small>
-        </div>
-
-        <div class="actions search-actions">
-          <button id="btnSearch" class="btn" type="button">Buscar</button>
-          <button id="btnClearSearch" class="btn btn-secondary" type="button">Limpar busca</button>
-        </div>
-
+    <section class="quick-services-section">
+      <div class="section-title-row">
+        <h3>Serviços mais buscados</h3>
       </div>
-      
+
+      <div class="quick-services-grid">
+        <button type="button" class="quick-service-card" data-service-quick="Eletricista">
+          <span>⚡</span>
+          <strong>Eletricista</strong>
+        </button>
+
+        <button type="button" class="quick-service-card" data-service-quick="Encanador">
+          <span>🚰</span>
+          <strong>Encanador</strong>
+        </button>
+
+        <button type="button" class="quick-service-card" data-service-quick="Pedreiro">
+          <span>🧱</span>
+          <strong>Pedreiro</strong>
+        </button>
+
+        <button type="button" class="quick-service-card" data-service-quick="Chaveiro">
+          <span>🔑</span>
+          <strong>Chaveiro</strong>
+        </button>
+      </div>
+    </section>
+
+    <section id="howItWorksSection" class="how-it-works-app">
+      <h3>Como funciona</h3>
+
+      <div class="how-steps-app">
+        <article>
+          <span class="step-number">1</span>
+          <div class="step-icon">📝</div>
+          <h4>Informe o serviço</h4>
+          <p>Digite o que precisa e onde você está.</p>
+        </article>
+
+        <article>
+          <span class="step-number">2</span>
+          <div class="step-icon">📍</div>
+          <h4>Veja profissionais</h4>
+          <p>Confira prestadores próximos da sua região.</p>
+        </article>
+
+        <article>
+          <span class="step-number">3</span>
+          <div class="step-icon whatsapp-step">☘</div>
+          <h4>Chame no WhatsApp</h4>
+          <p>Combine valores, prazo e detalhes diretamente.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="provider-cta-app">
+      <div class="provider-cta-icon">👤</div>
+
+      <div>
+        <h3>É prestador de serviço?</h3>
+        <p>Cadastre seu perfil e apareça para clientes da sua região.</p>
+        <small>Primeiros 500 aprovados ganham 3 meses grátis.</small>
+      </div>
+
+      <button type="button" class="btn" data-route="register">
+        Cadastrar meu perfil
+      </button>
+    </section>
+
+    <section class="trust-app-card">
+      <h3>Confiança que você pode contar</h3>
+
+      <div class="trust-app-grid">
+        <div>
+          <span>🛡️</span>
+          <p>Perfis cadastrados na plataforma</p>
+        </div>
+
+        <div>
+          <span>⭐</span>
+          <p>Avaliações de usuários</p>
+        </div>
+
+        <div>
+          <span>🔒</span>
+          <p>Contato direto pelo WhatsApp</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="results-area-app">
       <div class="results-header">
         <h3>Prestadores encontrados</h3>
         <span id="resultsCount">Preencha a busca para começar</span>
@@ -143,15 +257,7 @@
 
       <div id="providersList" class="providers-list"></div>
     </section>
-
-    <section class="screen" id="screen-provider-profile">
-      <div class="results-header">
-        <h3>Perfil do prestador</h3>
-        <button id="btnBackToHomeFromProfile" class="btn btn-secondary" type="button">Voltar para a busca</button>
-      </div>
-
-      <div id="publicProfileContainer" class="public-profile-container"></div>
-    </section>
+  </section>
 
     <!-- LOGIN -->
     <section class="screen" id="screen-login">
@@ -915,6 +1021,28 @@
 
 
   </main>
+
+  <nav class="bottom-app-nav" aria-label="Navegação principal mobile">
+    <button type="button" class="bottom-nav-item active" data-route="home">
+      <span>⌂</span>
+      <small>Início</small>
+    </button>
+
+    <button type="button" class="bottom-nav-item" data-bottom-action="focus-search">
+      <span>⌕</span>
+      <small>Buscar</small>
+    </button>
+
+    <button type="button" class="bottom-nav-item" data-route="register">
+      <span>＋</span>
+      <small>Prestador</small>
+    </button>
+
+    <button type="button" class="bottom-nav-item" data-route="login">
+      <span>♙</span>
+      <small>Conta</small>
+    </button>
+  </nav>
 
   <template id="providerCardTemplate">
     <article class="provider-card">

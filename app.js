@@ -1096,6 +1096,9 @@ function navigate(route) {
 
   state.currentRoute = route;
 
+  closeMobileMenu();
+  updateBottomNavigation(route);
+
   document.querySelectorAll(".screen").forEach(screen => {
     screen.classList.remove("active");
   });
@@ -1132,11 +1135,25 @@ function refreshAuthUI() {
 
   $("btnDashboard")?.classList.toggle("hidden", !logged);
   $("btnLogout")?.classList.toggle("hidden", !logged);
+  $("btnMobileDashboard")?.classList.toggle("hidden", !logged);
+  $("btnMobileLogout")?.classList.toggle("hidden", !logged);
 
-  document.querySelector('[data-route="login"]')?.classList.toggle("hidden", logged);
-  document.querySelector('[data-route="register"]')?.classList.toggle("hidden", logged);
+  document.querySelectorAll('[data-route="login"]').forEach(item => {
+    item.classList.toggle("hidden", logged);
+  });
+
+  document.querySelectorAll('[data-route="register"]').forEach(item => {
+    item.classList.toggle("hidden", logged);
+  });
+
+  document.querySelectorAll('.bottom-nav-item[data-route="login"]').forEach(item => {
+    item.classList.toggle("hidden", logged);
+  });
+
+  document.querySelectorAll('.bottom-nav-item[data-route="register"]').forEach(item => {
+    item.classList.toggle("hidden", logged);
+  });
 }
-
 function setupTopbarScroll() {
   const topbar = document.querySelector(".topbar");
   if (!topbar) return;
@@ -1587,6 +1604,199 @@ function bindNavigation() {
     showAlert("Erro ao sair da conta.", "error");
   }
 });
+}
+
+function closeMobileMenu() {
+  $("mobileMenuOverlay")?.classList.add("hidden");
+  $("mobileMenuPanel")?.classList.add("hidden");
+}
+
+function openMobileMenu() {
+  $("mobileMenuOverlay")?.classList.remove("hidden");
+  $("mobileMenuPanel")?.classList.remove("hidden");
+}
+
+function setupMobileMenu() {
+  $("btnMobileMenu")?.addEventListener("click", openMobileMenu);
+  $("btnCloseMobileMenu")?.addEventListener("click", closeMobileMenu);
+  $("mobileMenuOverlay")?.addEventListener("click", closeMobileMenu);
+
+  document.querySelectorAll("[data-scroll-target]").forEach(button => {
+    button.addEventListener("click", () => {
+      const targetId = button.getAttribute("data-scroll-target");
+      const target = targetId ? document.getElementById(targetId) : null;
+
+      closeMobileMenu();
+
+      if (target) {
+        target.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      }
+    });
+  });
+
+  $("btnMobileLogout")?.addEventListener("click", async () => {
+    try {
+      closeMobileMenu();
+      await supabase.auth.signOut();
+      showAlert("Você saiu da conta.", "info");
+      navigate("home");
+    } catch (error) {
+      console.error(error);
+      showAlert("Erro ao sair da conta.", "error");
+    }
+  });
+}
+
+function setupQuickServiceButtons() {
+  document.querySelectorAll("[data-service-quick]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const service = button.getAttribute("data-service-quick") || "";
+      const input = $("searchService");
+
+      if (input) {
+        input.value = service;
+      }
+
+      await handleSearchProviders();
+
+      $("providersList")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    });
+  });
+}
+
+function setupBottomNavigation() {
+  document.querySelectorAll("[data-bottom-action]").forEach(button => {
+    button.addEventListener("click", () => {
+      const action = button.getAttribute("data-bottom-action");
+
+      if (action === "focus-search") {
+        navigate("home");
+
+        setTimeout(() => {
+          $("searchService")?.focus();
+          $("searchService")?.scrollIntoView({
+            behavior: "smooth",
+            block: "center"
+          });
+        }, 80);
+      }
+    });
+  });
+}
+
+function updateBottomNavigation(route) {
+  document.querySelectorAll(".bottom-nav-item").forEach(button => {
+    const buttonRoute = button.getAttribute("data-route");
+    const buttonAction = button.getAttribute("data-bottom-action");
+
+    const isActive =
+      buttonRoute === route ||
+      (route === "home" && buttonAction === "focus-search" && document.activeElement === $("searchService"));
+
+    button.classList.toggle("active", isActive);
+  });
+}
+function closeMobileMenu() {
+  $("mobileMenuOverlay")?.classList.add("hidden");
+  $("mobileMenuPanel")?.classList.add("hidden");
+}
+
+function openMobileMenu() {
+  $("mobileMenuOverlay")?.classList.remove("hidden");
+  $("mobileMenuPanel")?.classList.remove("hidden");
+}
+
+function setupMobileMenu() {
+  $("btnMobileMenu")?.addEventListener("click", openMobileMenu);
+  $("btnCloseMobileMenu")?.addEventListener("click", closeMobileMenu);
+  $("mobileMenuOverlay")?.addEventListener("click", closeMobileMenu);
+
+  document.querySelectorAll("[data-scroll-target]").forEach(button => {
+    button.addEventListener("click", () => {
+      const targetId = button.getAttribute("data-scroll-target");
+      const target = targetId ? document.getElementById(targetId) : null;
+
+      closeMobileMenu();
+
+      if (target) {
+        target.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      }
+    });
+  });
+
+  $("btnMobileLogout")?.addEventListener("click", async () => {
+    try {
+      closeMobileMenu();
+      await supabase.auth.signOut();
+      showAlert("Você saiu da conta.", "info");
+      navigate("home");
+    } catch (error) {
+      console.error(error);
+      showAlert("Erro ao sair da conta.", "error");
+    }
+  });
+}
+
+function setupQuickServiceButtons() {
+  document.querySelectorAll("[data-service-quick]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const service = button.getAttribute("data-service-quick") || "";
+      const input = $("searchService");
+
+      if (input) {
+        input.value = service;
+      }
+
+      await handleSearchProviders();
+
+      $("providersList")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    });
+  });
+}
+
+function setupBottomNavigation() {
+  document.querySelectorAll("[data-bottom-action]").forEach(button => {
+    button.addEventListener("click", () => {
+      const action = button.getAttribute("data-bottom-action");
+
+      if (action === "focus-search") {
+        navigate("home");
+
+        setTimeout(() => {
+          $("searchService")?.focus();
+          $("searchService")?.scrollIntoView({
+            behavior: "smooth",
+            block: "center"
+          });
+        }, 80);
+      }
+    });
+  });
+}
+
+function updateBottomNavigation(route) {
+  document.querySelectorAll(".bottom-nav-item").forEach(button => {
+    const buttonRoute = button.getAttribute("data-route");
+    const buttonAction = button.getAttribute("data-bottom-action");
+
+    const isActive =
+      buttonRoute === route ||
+      (route === "home" && buttonAction === "focus-search" && document.activeElement === $("searchService"));
+
+    button.classList.toggle("active", isActive);
+  });
 }
 
 function bindHome() {
@@ -3488,6 +3698,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindRegister();
   bindDashboard();
   bindPayments();
+
+  setupMobileMenu();
+  setupQuickServiceButtons();
+  setupBottomNavigation();
+
 
   bindPrivacyActions();
   
