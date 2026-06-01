@@ -1466,30 +1466,64 @@ if (providerCard && isBoostActive(provider)) {
     }
 
     const viewProfileBtn = fragment.querySelector(".btn-view-profile");
-viewProfileBtn.addEventListener("click", async () => {
-  const url = new URL(window.location.href);
-  url.searchParams.set("prestador", provider.id);
-  window.history.pushState({}, "", url);
 
-  navigate("provider-profile");
+      viewProfileBtn.addEventListener("click", async event => {
+        event.preventDefault();
+        event.stopPropagation();
 
-  const profileContainer = $("publicProfileContainer");
-  if (profileContainer) {
-    profileContainer.innerHTML = `
-      <div class="card">
-        <h3>Carregando perfil...</h3>
-        <p class="muted">Estamos abrindo o perfil do prestador.</p>
-      </div>
-    `;
-  }
+        const url = new URL(window.location.href);
+        url.searchParams.set("prestador", provider.id);
+        window.history.pushState({}, "", url);
 
-  try {
-    await loadPublicProfile();
-  } catch (error) {
-    console.error("Erro ao abrir perfil público:", error);
-    showAlert("Não foi possível abrir o perfil do prestador.", "error");
-  }
-});
+        state.currentRoute = "provider-profile";
+
+        document.querySelectorAll(".screen").forEach(screen => {
+          screen.classList.remove("active");
+        });
+
+        $("screen-provider-profile")?.classList.add("active");
+
+        if (typeof closeMobileMenu === "function") {
+          closeMobileMenu();
+        }
+
+        if (typeof updateBottomNavigation === "function") {
+          updateBottomNavigation("provider-profile");
+        }
+
+        const profileContainer = $("publicProfileContainer");
+
+        if (profileContainer) {
+          profileContainer.innerHTML = `
+            <div class="card">
+              <h3>Carregando perfil...</h3>
+              <p class="muted">Estamos abrindo o perfil do prestador.</p>
+            </div>
+          `;
+        }
+
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth"
+        });
+
+        try {
+          await loadPublicProfile();
+        } catch (error) {
+          console.error("Erro ao abrir perfil público:", error);
+
+          if (profileContainer) {
+            profileContainer.innerHTML = `
+              <div class="card">
+                <h3>Não foi possível abrir este perfil</h3>
+                <p class="muted">Tente buscar novamente ou escolha outro prestador.</p>
+              </div>
+            `;
+          }
+
+          showAlert("Não foi possível abrir o perfil do prestador.", "error");
+        }
+    });
 
     const whatsappBtn = fragment.querySelector(".btn-whatsapp");
     whatsappBtn.href = toWhatsappLink(
@@ -3347,6 +3381,18 @@ async function loadPublicProfile() {
     return;
   }
 
+  state.currentRoute = "provider-profile";
+
+  document.querySelectorAll(".screen").forEach(screen => {
+    screen.classList.remove("active");
+  });
+
+  $("screen-provider-profile")?.classList.add("active");
+
+  if (typeof updateBottomNavigation === "function") {
+    updateBottomNavigation("provider-profile");
+  }
+
     const { data, error } = await supabase
     .from("prestadores")
     .select("*")
@@ -3498,7 +3544,22 @@ async function loadPublicProfile() {
     });
   }
 
-  navigate("provider-profile");
+  state.currentRoute = "provider-profile";
+
+  document.querySelectorAll(".screen").forEach(screen => {
+    screen.classList.remove("active");
+  });
+
+  $("screen-provider-profile")?.classList.add("active");
+
+  if (typeof updateBottomNavigation === "function") {
+    updateBottomNavigation("provider-profile");
+  }
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
 }
 
 async function avaliarPrestador(prestadorId, options = {}) {
