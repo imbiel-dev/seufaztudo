@@ -886,6 +886,7 @@ function sanitizeProviderInsertPayload(payload, userId) {
     user_id: userId,
     email: safeTrim(payload?.email, 160),
     nome: safeTrim(payload?.nome, 120),
+    foto_url: safeTrim(payload?.foto_url, 1000),
     descricao: safeTrim(payload?.descricao, 1000),
     servico: safeTrim(payload?.servico, 120),
     servicos: Array.isArray(payload?.servicos) ? payload.servicos.slice(0, 20) : [],
@@ -1008,6 +1009,128 @@ async function ensureProviderProfileForCurrentUser() {
 
 function $(id) {
   return document.getElementById(id);
+}
+
+function refreshIcons() {
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
+  }
+}
+
+function whatsappIconSvg() {
+  return `
+    <svg class="whatsapp-svg" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 3.5C9.1 3.5 3.5 8.7 3.5 15.1c0 3.1 1.35 5.92 3.55 8L6 28.5l5.68-1.4A13.3 13.3 0 0 0 16 27.8c6.9 0 12.5-5.2 12.5-11.65S22.9 3.5 16 3.5Zm0 21.75c-1.4 0-2.75-.27-4-.78l-.42-.15l-2.65.65l.5-2.55l-.35-.38A9.7 9.7 0 0 1 6 15.1C6 10.1 10.48 6.05 16 6.05S26 10.1 26 15.1s-4.48 10.15-10 10.15Z"/>
+      <path d="M12.15 10.7c.25-.38.55-.42.82-.42h.58c.22 0 .48.08.62.45c.22.52.72 1.75.78 1.88c.07.13.1.3.02.48c-.1.2-.18.32-.33.5c-.15.17-.3.35-.42.48c-.15.15-.3.32-.13.62c.17.3.75 1.22 1.6 1.98c1.1.98 2.02 1.28 2.32 1.42c.3.15.48.13.65-.07c.2-.22.78-.9.98-1.2c.2-.3.42-.25.7-.15c.28.1 1.78.83 2.08.98c.3.15.5.22.58.35c.08.13.08.75-.18 1.48c-.25.72-1.48 1.38-2.08 1.47c-.55.08-1.25.12-2.02-.13c-.47-.15-1.07-.35-1.82-.68c-3.2-1.38-5.3-4.55-5.45-4.75c-.15-.2-1.3-1.7-1.3-3.25c0-1.55.82-2.32 1.1-2.62c.28-.32.62-.4.92-.4Z"/>
+    </svg>
+  `;
+}
+
+const PROVIDER_PHOTOS_BUCKET = "provider-photos";
+
+function getPhotoPublicUrl(path) {
+  if (!path || !supabase) return "";
+
+  const { data } = supabase
+    .storage
+    .from(PROVIDER_PHOTOS_BUCKET)
+    .getPublicUrl(path);
+
+  return data?.publicUrl || "";
+}
+
+function getProviderPhotoUrl(provider) {
+  return provider?.foto_url || "";
+}
+
+function setImagePreview(containerId, url) {
+  const container = $(containerId);
+  if (!container) return;
+
+  if (url) {
+    container.innerHTML = `<img src="${escapeHtml(url)}" alt="Foto do prestador" loading="lazy" />`;
+  } else {
+    container.innerHTML = `<i data-lucide="user-round"></i>`;
+  }
+
+  refreshIcons();
+}
+
+function validatePhotoFile(file) {
+  if (!file) return null;
+
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+  const maxSizeMb = 4;
+  const maxSizeBytes = maxSizeMb * 1024 * 1024;
+
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("Envie uma imagem JPG, PNG ou WebP.");
+  }
+
+  if (file.size > maxSizeBytes) {
+    throw new Error(`A foto deve ter no máximo ${maxSizeMb} MB.`);
+  }
+
+  return file;
+}
+
+async function uploadProviderPhoto(file, folder = "public") {
+  validatePhotoFile(file);
+
+  if (!file || !supabase) return "";
+
+  const extension =
+    file.type === "image/png"
+      ? "png"
+      : file.type === "image/webp"
+        ? "webp"
+        : "jpg";
+
+  const safeFolder = String(folder || "public")
+    .replace(/[^a-zA-Z0-9-_]/g, "-")
+    .slice(0, 80);
+
+  const filePath = `${safeFolder}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+
+  const { error } = await supabase
+    .storage
+    .from(PROVIDER_PHOTOS_BUCKET)
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type
+    });
+
+  if (error) {
+    console.error("Erro ao enviar foto:", error);
+    throw new Error("Não foi possível enviar a foto. Verifique o Storage do Supabase.");
+  }
+
+  return getPhotoPublicUrl(filePath);
+}
+
+function setupPhotoPreviewInput(inputId, previewId) {
+  const input = $(inputId);
+  if (!input) return;
+
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+
+    if (!file) {
+      setImagePreview(previewId, "");
+      return;
+    }
+
+    try {
+      validatePhotoFile(file);
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreview(previewId, previewUrl);
+    } catch (error) {
+      input.value = "";
+      setImagePreview(previewId, "");
+      showAlert(error.message, "error");
+    }
+  });
 }
 
 function showAlert(message, type = "info") {
@@ -1436,6 +1559,17 @@ function renderProviders(list) {
     const fragment = template.content.cloneNode(true);
     const providerCard = fragment.querySelector(".provider-card");
 
+    const photoBox = fragment.querySelector(".provider-card-photo");
+    const photoUrl = getProviderPhotoUrl(provider);
+
+    if (photoBox) {
+      if (photoUrl) {
+        photoBox.innerHTML = `<img src="${escapeHtml(photoUrl)}" alt="Foto de ${escapeHtml(provider.nome || "prestador")}" loading="lazy" />`;
+      } else {
+        photoBox.innerHTML = `<i data-lucide="user-round"></i>`;
+      }
+    }
+
 if (providerCard && isBoostActive(provider)) {
   providerCard.classList.add("provider-card-boost");
 }
@@ -1458,7 +1592,7 @@ if (providerCard && isBoostActive(provider)) {
     const meta = fragment.querySelector(".provider-meta");
     meta.appendChild(createMetaPill(`${Number(provider.experiencia_anos || 0)} anos de experiência`));
     meta.appendChild(createMetaPill(formatCurrency(provider.preco_medio)));
-    meta.appendChild(createMetaPill(`⭐ ${Number(provider.avaliacao_media || 0).toFixed(1)}`));
+    meta.appendChild(createMetaPill(`Avaliação ${Number(provider.avaliacao_media || 0).toFixed(1)}`));
     meta.appendChild(createMetaPill(`Atende até ${Number(provider.raio_km || 0)} km`));
 
     if (typeof provider.distanceKm === "number") {
@@ -1537,6 +1671,9 @@ if (providerCard && isBoostActive(provider)) {
 
     container.appendChild(fragment);
   });
+  
+  refreshIcons();
+
 }
 
 async function incrementProviderViews(providerId) {
@@ -2094,6 +2231,8 @@ function bindRegister() {
     const primaryService = sanitizeSingleService($("registerService").value);
     const allServices = buildProviderServices(primaryService, state.registerAdditionalServices);
 
+    const registerPhotoFile = $("registerPhoto")?.files?.[0] || null;
+
     const payload = {
       nome: safeTrim($("registerName").value, 120),
       email: safeTrim($("registerEmail").value, 160),
@@ -2154,6 +2293,14 @@ function bindRegister() {
     try {
       setButtonLoading(submitBtn, true, "Criando conta...");
 
+      let uploadedPhotoUrl = "";
+
+      if (registerPhotoFile) {
+        setButtonLoading(submitBtn, true, "Enviando foto...");
+        uploadedPhotoUrl = await uploadProviderPhoto(registerPhotoFile, "cadastros");
+        setButtonLoading(submitBtn, true, "Criando conta...");
+      }
+
       const { count, error: countError } = await supabase
         .from("prestadores")
         .select("*", { count: "exact", head: true });
@@ -2169,6 +2316,7 @@ function bindRegister() {
     const pendingProfile = {
         email: payload.email,
         nome: payload.nome,
+        foto_url: uploadedPhotoUrl,
         descricao: payload.descricao,
         servico: payload.servico,
         servicos: payload.servicos,
@@ -2225,6 +2373,8 @@ function bindRegister() {
       await fetchProviders();
       updateDashboardUI();
 
+      setImagePreview("registerPhotoPreview", "");
+
       if (session?.user?.id && state.currentProviderProfile) {
         navigate("dashboard");
         showAlert("Cadastro concluído com sucesso. Sua conta já entrou automaticamente.", "success");
@@ -2258,7 +2408,8 @@ function setProfileEditMode(isEditing) {
     "profileExperience",
     "profilePrice",
     "profileRadius",
-    "profileDescription"
+    "profileDescription",
+    "profilePhoto"
   ];
 
   ids.forEach(id => {
@@ -2452,9 +2603,23 @@ function bindDashboard() {
         ? Number(state.currentProviderProfile.longitude)
         : null;
 
+      let uploadedPhotoUrl = state.currentProviderProfile?.foto_url || "";
+      const profilePhotoFile = $("profilePhoto")?.files?.[0] || null;
+
+        if (profilePhotoFile) {
+          setButtonLoading(button, true, "Enviando foto...");
+          uploadedPhotoUrl = await uploadProviderPhoto(
+            profilePhotoFile,
+            state.currentUser.id || "perfil"
+          );
+
+          setButtonLoading(button, true, "Salvando...");
+        }
+
     const updatePayload = {
       nome: safeTrim($("profileName")?.value, 120),
       whatsapp,
+      foto_url: uploadedPhotoUrl,
       servico: primaryService,
       servicos: allServices,
       experiencia_anos: toPositiveNumber($("profileExperience")?.value) ?? 0,
@@ -2790,6 +2955,7 @@ function updateDashboardUI() {
   const profileRadius = $("profileRadius");
   const profileDescription = $("profileDescription");
   const profileLocationText = $("profileLocationText");
+  const profilePhoto = $("profilePhoto");
   const statViews = $("statViews");
   const statWhatsapp = $("statWhatsapp");
   const statRating = $("statRating");
@@ -2808,7 +2974,8 @@ function updateDashboardUI() {
     if (profileRadius) profileRadius.value = "10";
     if (profileDescription) profileDescription.value = "";
     if (profileLocationText) profileLocationText.textContent = "não definida";
-
+    if (profilePhoto) profilePhoto.value = "";
+    setImagePreview("profilePhotoPreview", "");
     if (statViews) statViews.textContent = "0";
     if (statWhatsapp) statWhatsapp.textContent = "0";
     if (statRating) statRating.textContent = "0.0";
@@ -2846,6 +3013,9 @@ function updateDashboardUI() {
       btnRequestAccountDeletion.disabled = !logged;
       btnRequestAccountDeletion.textContent = "Solicitar exclusão da conta";
     }
+
+    if (profilePhoto) profilePhoto.value = "";
+    setImagePreview("profilePhotoPreview", getProviderPhotoUrl(profile));
 
     $("btnToggleEditProfile")?.classList.toggle("hidden", !profile);
 
@@ -3422,16 +3592,29 @@ async function loadPublicProfile() {
   const alreadyRated = hasPublicRatedProvider(data.id);
   state.publicRatingValue = 0;
 
+  const publicPhotoUrl = getProviderPhotoUrl(data);
+
   container.innerHTML = `
     <article class="public-profile-card">
       <div class="public-profile-header">
-        <div>
-          <div class="public-profile-top-tags">
-            <span class="tag">Prestador verificado na plataforma</span>
-            ${boostAtivo ? `<span class="badge badge-boost">Boost ativo</span>` : ``}
+        <div class="public-profile-identity">
+          <div class="public-profile-photo">
+            ${
+              publicPhotoUrl
+                ? `<img src="${escapeHtml(publicPhotoUrl)}" alt="Foto de ${escapeHtml(data.nome || "prestador")}" loading="lazy" />`
+                : `<i data-lucide="user-round"></i>`
+            }
           </div>
-          <h2>${escapeHtml(data.nome || "Prestador")}</h2>
-          <p class="public-profile-services">${escapeHtml(services.join(", ") || "Serviço não informado")}</p>
+
+          <div>
+            <div class="public-profile-top-tags">
+              <span class="tag">Prestador cadastrado na plataforma</span>
+              ${boostAtivo ? `<span class="badge badge-boost">Boost ativo</span>` : ``}
+            </div>
+
+            <h2>${escapeHtml(data.nome || "Prestador")}</h2>
+            <p class="public-profile-services">${escapeHtml(services.join(", ") || "Serviço não informado")}</p>
+          </div>
         </div>
       </div>
 
@@ -3459,7 +3642,7 @@ async function loadPublicProfile() {
         <div class="provider-actions">
           ${
             whatsappLink
-              ? `<a id="publicProfileWhatsappBtn" class="btn btn-whatsapp" target="_blank" rel="noopener noreferrer" href="${whatsappLink}">Falar no WhatsApp</a>`
+              ? `<a id="publicProfileWhatsappBtn" class="btn btn-whatsapp public-whatsapp-action" target="_blank" rel="noopener noreferrer" href="${whatsappLink}">${whatsappIconSvg()} Falar no WhatsApp</a>`
               : `<button class="btn btn-secondary" type="button" disabled>WhatsApp não informado</button>`
           }
         </div>
@@ -3560,6 +3743,9 @@ async function loadPublicProfile() {
     top: 0,
     behavior: "smooth"
   });
+
+  refreshIcons();
+
 }
 
 async function avaliarPrestador(prestadorId, options = {}) {
@@ -3772,6 +3958,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindChangePassword();
   setupPasswordToggles();
 
+  setupPhotoPreviewInput("registerPhoto", "registerPhotoPreview");
+  setupPhotoPreviewInput("profilePhoto", "profilePhotoPreview");
+
   setupTopbarScroll();
 
   setupServiceAutocomplete("searchService", "searchServiceSuggestions", "searchServiceHint");
@@ -3797,4 +3986,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (footerYear) {
     footerYear.textContent = String(new Date().getFullYear());
   }
+
+    refreshIcons();
 });
